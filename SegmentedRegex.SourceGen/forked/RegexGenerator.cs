@@ -358,16 +358,6 @@ namespace System.Text.RegularExpressions.Generator
                 return false;
             }
 
-            // RETARGET: the multi-string find optimization emits SearchValues<string> searches, which
-            // SegmentedSpan deliberately does not implement in v1. Route to the fallback engine.
-            if (method.Tree.FindOptimizations.FindMode is
-                    FindNextStartingPositionMode.LeadingStrings_LeftToRight or
-                    FindNextStartingPositionMode.LeadingStrings_OrdinalIgnoreCase_LeftToRight)
-            {
-                reason = "the pattern's multi-string search optimization is not supported by the segmented engine; the fallback engine is used instead";
-                return false;
-            }
-
             RegexNode node = method.Tree.Root;
 
             if (!node.SupportsCompilation(out reason))

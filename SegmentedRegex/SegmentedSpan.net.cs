@@ -139,7 +139,7 @@ public ref struct SegmentedSpan
 
     /// <summary>Copies this window into <paramref name="destination"/>.</summary>
     /// <param name="destination">The buffer to copy into. Must be at least <see cref="Length"/> long.</param>
-    public void CopyTo(Span<char> destination)
+    public void CopyTo(scoped Span<char> destination)
     {
         if (destination.Length < _length)
         {
@@ -293,6 +293,71 @@ public ref struct SegmentedSpan
             if (found >= 0)
             {
                 return i + found;
+            }
+            i = consumed;
+        }
+        return -1;
+    }
+
+    /// <summary>Returns the offset of the earliest position where any string in <paramref name="values"/> matches, or -1.</summary>
+    /// <param name="values">The strings to search for, with their comparison (ordinal or ordinal-ignore-case) baked in.</param>
+    /// <param name="maxLength">The length of the longest string in <paramref name="values"/>, which bounds the boundary stitching.</param>
+    /// <returns>The zero-based offset of the earliest match, or -1.</returns>
+    /// <remarks>
+    /// The multi-string analogue of <see cref="IndexOf(ReadOnlySpan{char})"/>. Per-chunk vectorized search finds
+    /// candidates lying wholly inside a chunk; a bounded window rebuilt contiguously at each boundary and searched with
+    /// the same <paramref name="values"/> catches the straddlers, so the comparison stays correct without ever needing
+    /// the needle strings out here. Unlike the single-string case, the earliest wholly-internal hit cannot short-circuit:
+    /// a longer string straddling a boundary can start before a shorter one's in-chunk hit, so both are taken and the
+    /// earlier wins.
+    /// </remarks>
+    public int IndexOfAny(SearchValues<string> values, int maxLength)
+    {
+        if (TryGetContiguous(out var contiguous))
+        {
+            return contiguous.IndexOfAny(values);
+        }
+        if (maxLength <= 0)
+        {
+            return -1;
+        }
+
+        Span<char> scratch = stackalloc char[256];
+        var i = 0;
+        while (i < _length)
+        {
+            var chunk = ChunkFrom(i, out var consumed);
+
+            var internalHit = chunk.IndexOfAny(values);
+            var earliest = internalHit >= 0 ? i + internalHit : int.MaxValue;
+
+            // Straddlers start in [consumed - maxLength + 1, consumed - 1] and finish past the boundary. Rebuild that
+            // region plus the maxLength-1 chars a straddler can reach into, contiguously, and search it with `values`.
+            var windowStart = Math.Max(i, consumed - maxLength + 1);
+            if (windowStart < consumed && windowStart < earliest)
+            {
+                var windowLength = Math.Min(_length - windowStart, (consumed - windowStart) + maxLength - 1);
+                char[] rented = null;
+                var window = (windowLength <= scratch.Length ? scratch : rented = ArrayPool<char>.Shared.Rent(windowLength)).Slice(0, windowLength);
+                Slice(windowStart, windowLength).CopyTo(window);
+
+                var windowHit = ((ReadOnlySpan<char>)window).IndexOfAny(values);
+                if (rented is not null)
+                {
+                    ArrayPool<char>.Shared.Return(rented);
+                }
+
+                // IndexOfAny gives the earliest in the window; if that start is before the boundary it is the earliest
+                // straddler, otherwise no match starts before the boundary at all.
+                if (windowHit >= 0 && windowStart + windowHit < consumed && windowStart + windowHit < earliest)
+                {
+                    earliest = windowStart + windowHit;
+                }
+            }
+
+            if (earliest != int.MaxValue)
+            {
+                return earliest;
             }
             i = consumed;
         }

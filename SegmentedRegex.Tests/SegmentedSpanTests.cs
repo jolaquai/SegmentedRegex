@@ -180,6 +180,38 @@ public class SegmentedSpanTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(Subjects))]
+    public void MultiStringIndexOfAnyAgreesWithTheContiguousSpan(string subject)
+    {
+        // ReadOnlySpan<char>.IndexOfAny(SearchValues<string>) is the reference: it returns the earliest start
+        // of any needle. Needle sets are chosen to include ones that straddle chunk boundaries and vary in length.
+        var needleSets = new[]
+        {
+            ["ab", "cd", "xyz"],
+            ["a", "bc"],
+            new[] { "abc", "z" },
+            ["  ", "AB"],
+            ["qq", "rr"], // absent
+        };
+
+        foreach (var needles in needleSets)
+        {
+            foreach (var comparison in new[] { StringComparison.Ordinal, StringComparison.OrdinalIgnoreCase })
+            {
+                var values = SearchValues.Create(needles, comparison);
+                var maxLen = needles.Max(static n => n.Length);
+                var expected = subject.AsSpan().IndexOfAny(values);
+
+                foreach (var (label, sequence) in Segmentation.All(subject))
+                {
+                    var actual = new SegmentedSpan(sequence).IndexOfAny(values, maxLen);
+                    Assert.True(expected == actual, $"[{label}] IndexOfAny(strings, {comparison}) on \"{subject}\": expected {expected}, got {actual}");
+                }
+            }
+        }
+    }
+
     /// <summary>Every substring of the subject, plus needles that cannot match, plus the empty needle.</summary>
     private static IEnumerable<string> Needles(string subject)
     {

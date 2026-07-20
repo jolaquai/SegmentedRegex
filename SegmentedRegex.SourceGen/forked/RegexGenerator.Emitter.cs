@@ -1185,9 +1185,14 @@ namespace System.Text.RegularExpressions.Generator
                     ]);
                 }
 
+                // RETARGET: SegmentedSpan implements the multi-string search itself rather than deferring to
+                // SearchValues<string> over a contiguous span. It needs the longest prefix length to bound its
+                // boundary stitching; the comparison stays inside the SearchValues, so it is not passed separately.
+                int maxPrefixLength = opts.LeadingPrefixes.Max(prefix => prefix.Length);
+
                 writer.WriteLine($"// The pattern has multiple strings that could begin the match. Search for any of them.");
                 writer.WriteLine($"// If none can be found, there's no match.");
-                writer.WriteLine($"int i = inputSpan.Slice(pos).IndexOfAny({HelpersTypeName}.{fieldName});");
+                writer.WriteLine($"int i = inputSpan.Slice(pos).IndexOfAny({HelpersTypeName}.{fieldName}, {maxPrefixLength});");
                 using (EmitBlock(writer, "if (i >= 0)"))
                 {
                     writer.WriteLine("base.runtextpos = pos + i;");

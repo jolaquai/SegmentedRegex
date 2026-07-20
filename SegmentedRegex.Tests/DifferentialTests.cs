@@ -24,8 +24,10 @@ public class DifferentialTests
         { "a*", "bbb", RegexOptions.None },
         { "a*", "", RegexOptions.None },
 
-        // alternation
+        // alternation, incl. multi-string leading literals (LeadingStrings_* find mode, segment-native)
         { "cat|dog|bird", "a dog and a cat", RegexOptions.None },
+        { "hello|goodbye|hi", "say goodbye then hello", RegexOptions.None },
+        { "CAT|DOG|BIRD", "a dog and a Cat", RegexOptions.IgnoreCase },
         { "(a)|(b)", "ba", RegexOptions.None },
 
         // backreferences
