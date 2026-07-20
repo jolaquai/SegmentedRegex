@@ -23,7 +23,9 @@ namespace System.Text.RegularExpressions.Generator
         /// <summary>Name of the type emitted to contain helpers used by the generated code.</summary>
         private const string HelpersTypeName = "Utilities";
         /// <summary>Namespace containing all the generated code.</summary>
-        private const string GeneratedNamespace = "System.Text.RegularExpressions.Generated";
+        // RETARGET: distinct from the BCL generator's namespace so the two never collide in a project
+        // that uses both [GeneratedRegex] and [GeneratedSegEx].
+        private const string GeneratedNamespace = "SegmentedRegex.Generated";
         /// <summary>Code for a [GeneratedCode] attribute to put on the top-level generated members.</summary>
         private static readonly string s_generatedCodeAttribute = $"GeneratedCodeAttribute(\"{typeof(RegexGenerator).Assembly.GetName().Name}\", \"{typeof(RegexGenerator).Assembly.GetName().Version}\")";
         /// <summary>Header comments and usings to include at the top of every generated file.</summary>
@@ -255,6 +257,7 @@ namespace System.Text.RegularExpressions.Generator
                 writer.WriteLine($"    using System.Runtime.CompilerServices;");
                 writer.WriteLine($"    using System.Text.RegularExpressions;");
                 writer.WriteLine($"    using System.Threading;");
+                writer.WriteLine($"    using SegmentedRegex;"); // RETARGET: SegEx/SegExRunner/SegmentedSpan
                 writer.WriteLine($"");
 
                 // Emit each Regex-derived type.
@@ -311,7 +314,8 @@ namespace System.Text.RegularExpressions.Generator
                 writer.WriteLine($"}}");
 
                 // Save out the source
-                context.AddSource("RegexGenerator.g.cs", sw.ToString());
+                // RETARGET: distinct hint name from the BCL generator's.
+                context.AddSource("SegExGenerator.g.cs", sw.ToString());
             });
 
             // Project to just the diagnostics, discarding the model. ImmutableArray<Diagnostic> does not

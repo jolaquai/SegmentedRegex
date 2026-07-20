@@ -16,8 +16,11 @@ namespace System.Text.RegularExpressions.Generator
 {
     public partial class RegexGenerator
     {
-        private const string RegexName = "System.Text.RegularExpressions.Regex";
-        private const string GeneratedRegexAttributeName = "System.Text.RegularExpressions.GeneratedRegexAttribute";
+        // RETARGET: the constant names are kept so the diff against upstream stays a value change.
+        // These two are what make this generator fire for SegmentedRegex and never for [GeneratedRegex],
+        // so the BCL generator and this one can coexist in the same project without double-firing.
+        private const string RegexName = "SegmentedRegex.SegEx";
+        private const string GeneratedRegexAttributeName = "SegmentedRegex.GeneratedSegExAttribute";
 
         /// <summary>
         /// Returns null if nothing to do, a <see cref="Diagnostic"/> if there's an error to report,

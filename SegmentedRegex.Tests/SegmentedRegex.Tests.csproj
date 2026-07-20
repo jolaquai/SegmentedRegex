@@ -22,9 +22,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SegmentedRegex\SegmentedRegex.csproj" />
+    <!-- Referenced as a plain assembly, not an analyzer: the generator tests instantiate it directly
+         and drive it through a GeneratorDriver, which gives far better failure output than letting it
+         run implicitly over this project would. -->
+    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
   </ItemGroup>
 
