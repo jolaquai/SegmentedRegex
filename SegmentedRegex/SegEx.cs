@@ -50,13 +50,15 @@ public abstract class SegEx
     /// <summary>Creates a <see cref="SegEx"/> for <paramref name="pattern"/>.</summary>
     /// <param name="pattern">The pattern to match.</param>
     /// <returns>A <see cref="SegEx"/> backed by the fallback engine.</returns>
-    public static SegEx Create(string pattern) => Create(pattern, RegexOptions.None, Regex.InfiniteMatchTimeout);
+    /// <remarks>The per-match timeout is the process-wide <c>REGEX_DEFAULT_MATCH_TIMEOUT</c> default, if one is set.</remarks>
+    public static SegEx Create(string pattern) => Create(pattern, RegexOptions.None, DefaultMatchTimeout());
 
     /// <summary>Creates a <see cref="SegEx"/> for <paramref name="pattern"/>.</summary>
     /// <param name="pattern">The pattern to match.</param>
     /// <param name="options">The options to construct it with.</param>
     /// <returns>A <see cref="SegEx"/> backed by the fallback engine.</returns>
-    public static SegEx Create(string pattern, RegexOptions options) => Create(pattern, options, Regex.InfiniteMatchTimeout);
+    /// <remarks>The per-match timeout is the process-wide <c>REGEX_DEFAULT_MATCH_TIMEOUT</c> default, if one is set.</remarks>
+    public static SegEx Create(string pattern, RegexOptions options) => Create(pattern, options, DefaultMatchTimeout());
 
     /// <summary>Creates a <see cref="SegEx"/> for <paramref name="pattern"/>.</summary>
     /// <param name="pattern">The pattern to match.</param>
@@ -68,6 +70,17 @@ public abstract class SegEx
     /// segment-native one.
     /// </remarks>
     public static SegEx Create(string pattern, RegexOptions options, TimeSpan matchTimeout) => new FallbackSegEx(pattern, options, matchTimeout);
+
+    /// <summary>
+    /// The process-wide default match timeout, or <see cref="Regex.InfiniteMatchTimeout"/> when none is set.
+    /// </summary>
+    /// <remarks>
+    /// Resolves the same <c>REGEX_DEFAULT_MATCH_TIMEOUT</c> <see cref="AppContext"/> value the generated path
+    /// snapshots into its emitted <c>Utilities.s_defaultTimeout</c>, so runtime-constructed and fallback-routed
+    /// patterns honor the default the same way the segment-native ones do. Read live per call rather than
+    /// snapshotted, which the generated path cannot do; both agree for the usual startup-set switch.
+    /// </remarks>
+    internal static TimeSpan DefaultMatchTimeout() => AppContext.GetData("REGEX_DEFAULT_MATCH_TIMEOUT") is TimeSpan timeout ? timeout : Regex.InfiniteMatchTimeout;
 
     /// <inheritdoc cref="IsMatch(in ReadOnlySequence{char})"/>
     public bool IsMatch(string input) => IsMatch(Wrap(input));

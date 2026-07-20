@@ -15,7 +15,8 @@ public class ApiTests
         Assert.Equal(RegexOptions.IgnoreCase, segex.Options);
         Assert.Equal(timeout, segex.MatchTimeout);
         Assert.Equal("a+", segex.ToString());
-        Assert.Equal(Regex.InfiniteMatchTimeout, SegEx.Create("a+").MatchTimeout);
+        // The default-timeout behaviour of SegEx.Create is covered by TimeoutDefaultTests, which owns the
+        // process-wide REGEX_DEFAULT_MATCH_TIMEOUT switch so no other test races it.
     }
 
     [Fact]
