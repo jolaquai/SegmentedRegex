@@ -49,7 +49,9 @@ $sparsePaths = @(
     'src/libraries/System.Text.RegularExpressions/src/System/Collections'
     'src/libraries/Common/src/Roslyn'
     'src/libraries/Common/src/System'
+    'src/libraries/Common/src/Polyfills'
     'src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices'
+    'src/libraries/System.Private.CoreLib/src/System/Diagnostics/CodeAnalysis'
 )
 
 # the exact files that get copied into vendor/ - everything else pulled by the sparse
@@ -86,6 +88,18 @@ $files = @(
     'src/libraries/Common/src/System/Collections/Generic/ValueListBuilder.cs'
     'src/libraries/Common/src/System/Collections/Generic/ValueListBuilder.Pop.cs'
     'src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/IsExternalInit.cs'
+    # Directory.Build.targets in the real repo auto-injects these into every non-.NETCoreApp
+    # project (netstandard2.0 here included); outside the repo we have to vendor + wire them
+    # ourselves. See the ItemGroups gated on SkipIncludeNullableAttributes/IncludeSpanPolyfills
+    # in src/libraries/Directory.Build.targets.
+    'src/libraries/System.Private.CoreLib/src/System/Diagnostics/CodeAnalysis/NullableAttributes.cs'
+    'src/libraries/System.Private.CoreLib/src/System/Runtime/CompilerServices/CallerArgumentExpressionAttribute.cs'
+    'src/libraries/Common/src/Polyfills/ExceptionPolyfills.cs'
+    'src/libraries/Common/src/Polyfills/MemoryExtensionsPolyfills.cs'
+    'src/libraries/Common/src/System/StringPolyfills.cs'
+    'src/libraries/Common/src/System/Buffers/SearchValuesPolyfills.cs'
+    'src/libraries/Common/src/System/Text/AsciiPolyfills.cs'
+    'src/libraries/Common/src/Polyfills/EncodingPolyfills.cs'
 )
 
 function Ensure-SparseClone {

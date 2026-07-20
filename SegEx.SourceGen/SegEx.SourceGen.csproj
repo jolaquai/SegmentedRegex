@@ -4,11 +4,13 @@
     <OutputType>Library</OutputType>
     <TargetFramework>netstandard2.0</TargetFramework>
 
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <EmitCompilerGeneratedFiles Condition="'$(Configuration)' == 'Debug'">True</EmitCompilerGeneratedFiles>
     <LangVersion>latest</LangVersion>
+
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
 
     <AnalysisMode>recommended</AnalysisMode>
     <AnalysisModePerformance>all</AnalysisModePerformance>
@@ -17,6 +19,42 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+  </ItemGroup>
+
+  <!-- These 8 files are non-.NETCoreApp polyfills (NullableAttributes for [NotNullWhen] etc.,
+       SearchValues<T>, and friends). Inside dotnet/runtime, Directory.Build.targets auto-injects
+       them into every project targeting something other than modern .NETCoreApp; this project
+       lives outside that repo, so we vendor + wire them explicitly. Excluded from the default
+       glob and re-included only for non-.NETCoreApp targets, so this stays correct if a modern
+       TFM is ever added alongside netstandard2.0. -->
+  <ItemGroup>
+    <Compile Remove="vendor\dotnet-runtime\System.Private.CoreLib\src\System\Diagnostics\CodeAnalysis\NullableAttributes.cs" />
+    <Compile Remove="vendor\dotnet-runtime\System.Private.CoreLib\src\System\Runtime\CompilerServices\CallerArgumentExpressionAttribute.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\Polyfills\ExceptionPolyfills.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\Polyfills\MemoryExtensionsPolyfills.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\System\StringPolyfills.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\System\Buffers\SearchValuesPolyfills.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\System\Text\AsciiPolyfills.cs" />
+    <Compile Remove="vendor\dotnet-runtime\Common\src\Polyfills\EncodingPolyfills.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETCoreApp'">
+    <Compile Include="vendor\dotnet-runtime\System.Private.CoreLib\src\System\Diagnostics\CodeAnalysis\NullableAttributes.cs" />
+    <Compile Include="vendor\dotnet-runtime\System.Private.CoreLib\src\System\Runtime\CompilerServices\CallerArgumentExpressionAttribute.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\Polyfills\ExceptionPolyfills.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\Polyfills\MemoryExtensionsPolyfills.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\System\StringPolyfills.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\System\Buffers\SearchValuesPolyfills.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\System\Text\AsciiPolyfills.cs" />
+    <Compile Include="vendor\dotnet-runtime\Common\src\Polyfills\EncodingPolyfills.cs" />
+  </ItemGroup>
+
+  <!-- Strings.resx is the real vendored resource file (gen/Resources/Strings.resx at the pinned
+       SHA). Its LogicalName is set explicitly so it matches the ResourceManager base name used by
+       the hand-written vendor\...\gen\Resources\SR.cs (see that file for why it's hand-written
+       instead of vendored: the real SR.cs is emitted by repo-internal build tooling). -->
+  <ItemGroup>
+    <EmbeddedResource Update="vendor\dotnet-runtime\System.Text.RegularExpressions\gen\Resources\Strings.resx" LogicalName="SegEx.SourceGen.Strings.resources" />
   </ItemGroup>
 
   <Target Name="_UpstreamSourceUpToDateCheck" BeforeTargets="CoreCompile">
