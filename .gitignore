@@ -364,3 +364,10 @@ FodyWeavers.xsd
 
 # Local Claude settings
 .claude/
+
+
+
+### CUSTOM ###
+
+# Prevent committing upstream
+SegEx.SourceGen/vendor/

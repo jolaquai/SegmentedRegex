@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/Solution Items/">
     <File Path=".gitignore" />
+    <File Path="Directory.Build.Props" />
     <File Path="LICENSE" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="SegEx.SourceGen/SegEx.SourceGen.csproj" Id="f5f5ab08-c947-4d45-b0fe-d5cda3c6b890" />
   <Project Path="SegEx/SegEx.csproj" />
 </Solution>

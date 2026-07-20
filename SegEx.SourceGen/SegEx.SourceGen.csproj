@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netstandard2.0</TargetFramework>
+
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <EmitCompilerGeneratedFiles Condition="'$(Configuration)' == 'Debug'">True</EmitCompilerGeneratedFiles>
+    <LangVersion>latest</LangVersion>
+
+    <AnalysisMode>recommended</AnalysisMode>
+    <AnalysisModePerformance>all</AnalysisModePerformance>
+    <AnalysisModeInteroperability>none</AnalysisModeInteroperability>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+  </ItemGroup>
+
+  <Target Name="_UpstreamSourceUpToDateCheck" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <!-- Escape hatch for fully offline work: -p:SkipUpstreamDriftCheck=true -->
+      <SkipUpstreamDriftCheck Condition="'$(SkipUpstreamDriftCheck)' == ''">false</SkipUpstreamDriftCheck>
+      <!-- "Couldn't check" (network/git failure) fails CI (should always have network) but only
+           warns locally, so a flaky/offline connection doesn't block the inner dev loop.
+           Override explicitly with -p:UpstreamDriftCheckStrict=true|false. -->
+      <UpstreamDriftCheckStrict Condition="'$(UpstreamDriftCheckStrict)' == '' and '$(ContinuousIntegrationBuild)' == 'true'">true</UpstreamDriftCheckStrict>
+      <UpstreamDriftCheckStrict Condition="'$(UpstreamDriftCheckStrict)' == ''">false</UpstreamDriftCheckStrict>
+    </PropertyGroup>
+
+    <Exec Condition="'$(SkipUpstreamDriftCheck)' != 'true'"
+          Command="pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\scripts\Sync-RegexGenUpstream.ps1&quot; -Mode Check"
+          IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_UpstreamCheckExitCode" />
+    </Exec>
+
+    <!-- exit 1 = confirmed drift: always a hard error, Strict or not -->
+    <Error Condition="'$(SkipUpstreamDriftCheck)' != 'true' and '$(_UpstreamCheckExitCode)' == '1'"
+           Text="Upstream regex generator source has drifted from the vendored pin (see file-by-file errors above). Review the diff, then run scripts\Sync-RegexGenUpstream.ps1 -Mode Apply -Sha &lt;new-sha&gt;. Skip locally with -p:SkipUpstreamDriftCheck=true." />
+
+    <!-- exit 2 = couldn't check at all (network/git failure): policy-dependent -->
+    <Error Condition="'$(SkipUpstreamDriftCheck)' != 'true' and '$(_UpstreamCheckExitCode)' == '2' and '$(UpstreamDriftCheckStrict)' == 'true'"
+           Text="Could not check upstream regex generator source for drift (network or git error) - see Exec output above. Failing because UpstreamDriftCheckStrict=true." />
+    <Warning Condition="'$(SkipUpstreamDriftCheck)' != 'true' and '$(_UpstreamCheckExitCode)' == '2' and '$(UpstreamDriftCheckStrict)' != 'true'"
+             Text="Could not check upstream regex generator source for drift (network or git error); continuing (not strict). Set -p:UpstreamDriftCheckStrict=true to fail instead." />
+  </Target>
+
+</Project>

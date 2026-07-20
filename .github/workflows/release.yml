@@ -2,14 +2,19 @@ name: Build & Release
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write # required to create releases / upload assets
-  id-token: write # required for NuGet Trusted Publishing (OIDC)
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  # Never cancel an in-flight release on main - it could be mid-tag/publish.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  release:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,16 +24,40 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 11.0.x
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+  # Release depends on the tests, not just co-exists alongside them - nothing
+  # ships if they don't pass.
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create releases / upload assets
+      id-token: write # required for NuGet Trusted Publishing (OIDC)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
 
       - name: Restore
         run: dotnet restore SegEx/SegEx.csproj
 
       - name: Build
         run: dotnet build SegEx/SegEx.csproj --no-restore -c Release
-
-      - name: Test
-        run: dotnet test SegEx/SegEx.csproj --no-build -c Release --verbosity normal
 
       - name: Pack
         run: dotnet pack SegEx/SegEx.csproj --no-build -c Release -o artifacts
@@ -48,22 +77,22 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: echo "yes=true" >> "$GITHUB_OUTPUT"
 
-      # The .csproj <Version> is the single source of truth: it's what the
-      # package is stamped with, and it's what the release tag tracks.
+      # Directory.Build.props' CoreVersion is the single source of truth: it's
+      # what the package is stamped with, and it's what the release tag tracks.
       - name: Read version
         id: ver
         if: steps.ismain.outputs.yes == 'true'
         shell: pwsh
         run: |
-          [xml]$p = Get-Content SegEx/SegEx.csproj
-          $v = ($p.Project.PropertyGroup.Version | Where-Object { $_ }) | Select-Object -First 1
-          if (-not $v) { throw "No <Version> found in the .csproj." }
+          [xml]$p = Get-Content Directory.Build.props
+          $v = ($p.Project.PropertyGroup.CoreVersion | Where-Object { $_ }) | Select-Object -First 1
+          if (-not $v) { throw "No <CoreVersion> found in Directory.Build.props." }
           $v = "$v".Trim()
           "version=$v" >> $env:GITHUB_OUTPUT
           "tag=v$v" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $v -> tag v$v"
 
-      # A release is cut only when <Version> is bumped to something not yet tagged.
+      # A release is cut only when CoreVersion is bumped to something not yet tagged.
       # Pushes that don't change the version build + upload the artifact but skip
       # the release (re-tagging an existing version would clobber the release).
       - name: Check whether tag already exists

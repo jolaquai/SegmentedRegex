@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="_AddBToPack" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="..\SegEx.SourceGen\SegEx.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceGenOutput" />
+    </MSBuild>
+    <ItemGroup>
+      <None Include="@(_SourceGenOutput)" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>
