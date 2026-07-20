@@ -33,23 +33,26 @@ public class GeneratedEngineDifferentialTests
     }
 
     [Fact]
-    public void RepresentativePatternsTakeTheGeneratedPathNotTheFallback()
+    public void OnlyTheKnownMultiStringPatternTakesTheFallback()
     {
-        // The differential theory passes either way, since the fallback is also correct - this is
-        // what pins that the segment-native engine is the one being exercised.
-        foreach (var (pattern, options) in new[]
+        // The differential theory passes whether a pattern is generated or fallback, since both are
+        // correct against the oracle. Without this guard, a pattern silently dropping to the fallback
+        // (e.g. a SupportsCodeGeneration regression) would leave the generated path untested with no
+        // failure. So: assert exactly which corpus patterns are NOT segment-native. Today that is only
+        // the multi-string LeadingStrings_* alternation, which is deliberately routed to the fallback.
+        var fellBack = new List<string>();
+        foreach (ITheoryDataRow row in Corpus)
         {
-            ("abc", RegexOptions.None),
-            (@"(\d)+", RegexOptions.None),
-            ("a+", RegexOptions.None),
-            (@"\bcat\b", RegexOptions.None),
-            (@"(\w)\1", RegexOptions.None),
-            ("(?<2>a)(?<4>b)", RegexOptions.None),
-            ("ABC", RegexOptions.IgnoreCase),
-        })
-        {
-            Assert.True(GeneratedCorpus.Get(pattern, options) is GeneratedSegEx, $"{pattern} did not take the generated path");
+            var data = row.GetData();
+            var pattern = (string)data[0];
+            var options = (RegexOptions)data[2];
+            if (GeneratedCorpus.Get(pattern, options) is not GeneratedSegEx)
+            {
+                fellBack.Add($"{pattern} [{options}]");
+            }
         }
+
+        Assert.Equal(["cat|dog|bird [None]"], fellBack.Distinct().Order());
     }
 
     [Fact]
