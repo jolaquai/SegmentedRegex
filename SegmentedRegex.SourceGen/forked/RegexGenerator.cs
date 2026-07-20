@@ -348,6 +348,26 @@ namespace System.Text.RegularExpressions.Generator
                 return false;
             }
 
+            // RETARGET: RightToLeft is descoped from the segmented engine entirely (the reader has no
+            // backwards-search surface), so those patterns take the fallback engine via the limited
+            // boilerplate rather than failing the build. Lookbehinds are unaffected: they set RTL on
+            // subtree nodes, not on the method's options.
+            if ((method.Options & RegexOptions.RightToLeft) != 0)
+            {
+                reason = "RegexOptions.RightToLeft is not supported by the segmented engine; the fallback engine is used instead";
+                return false;
+            }
+
+            // RETARGET: the multi-string find optimization emits SearchValues<string> searches, which
+            // SegmentedSpan deliberately does not implement in v1. Route to the fallback engine.
+            if (method.Tree.FindOptimizations.FindMode is
+                    FindNextStartingPositionMode.LeadingStrings_LeftToRight or
+                    FindNextStartingPositionMode.LeadingStrings_OrdinalIgnoreCase_LeftToRight)
+            {
+                reason = "the pattern's multi-string search optimization is not supported by the segmented engine; the fallback engine is used instead";
+                return false;
+            }
+
             RegexNode node = method.Tree.Root;
 
             if (!node.SupportsCompilation(out reason))

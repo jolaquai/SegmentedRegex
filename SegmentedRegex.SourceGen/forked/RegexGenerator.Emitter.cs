@@ -98,7 +98,8 @@ namespace System.Text.RegularExpressions.Generator
             writer.WriteLine($"/// </code>");
             writer.WriteLine($"/// </remarks>");
             writer.WriteLine($"[global::System.CodeDom.Compiler.{s_generatedCodeAttribute}]");
-            writer.Write($"{regexMethod.Modifiers} global::System.Text.RegularExpressions.Regex{(regexMethod.NullableRegex ? "?" : "")} {regexMethod.MemberName}");
+            // RETARGET: the partial method returns SegEx, not Regex.
+            writer.Write($"{regexMethod.Modifiers} global::SegmentedRegex.SegEx{(regexMethod.NullableRegex ? "?" : "")} {regexMethod.MemberName}");
             if (!regexMethod.IsProperty)
             {
                 writer.Write("()");
@@ -117,27 +118,30 @@ namespace System.Text.RegularExpressions.Generator
         private static void EmitRegexLimitedBoilerplate(
             IndentedTextWriter writer, RegexMethod rm, string reason, LanguageVersion langVer)
         {
+            // RETARGET: with no segment-native matcher to emit, cache a fallback-engine SegEx rather
+            // than a new Regex(...). SegEx.Create is the runtime's materialize-and-delegate path, so
+            // the pattern still matches correctly on segmented subjects - it just copies to do so.
             string visibility;
             if (langVer >= LanguageVersion.CSharp11)
             {
                 visibility = "file";
-                writer.WriteLine($"/// <summary>Caches a <see cref=\"Regex\"/> instance for the {rm.MemberName} method.</summary>");
+                writer.WriteLine($"/// <summary>Caches a <see cref=\"SegEx\"/> instance for the {rm.MemberName} method.</summary>");
             }
             else
             {
                 visibility = "internal";
                 writer.WriteLine($"/// <summary>This class supports generated regexes and should not be used by other code directly.</summary>");
             }
-            writer.WriteLine($"/// <remarks>A custom Regex-derived type could not be generated because {reason}.</remarks>");
+            writer.WriteLine($"/// <remarks>A custom SegEx-derived type could not be generated because {reason}.</remarks>");
             writer.WriteLine($"[{s_generatedCodeAttribute}]");
-            writer.WriteLine($"{visibility} sealed class {rm.GeneratedName} : Regex");
+            writer.WriteLine($"{visibility} static class {rm.GeneratedName}");
             writer.WriteLine($"{{");
             writer.WriteLine($"    /// <summary>Cached, thread-safe singleton instance.</summary>");
-            writer.Write($"    internal static readonly Regex Instance = ");
+            writer.Write($"    internal static readonly SegEx Instance = ");
             writer.WriteLine(
-                rm.MatchTimeout is not null ? $"new({Literal(rm.Pattern)}, {Literal(rm.Options)}, {GetTimeoutExpression(rm.MatchTimeout.Value)});" :
-                rm.Options != 0 ? $"new({Literal(rm.Pattern)}, {Literal(rm.Options)});" :
-                $"new({Literal(rm.Pattern)});");
+                rm.MatchTimeout is not null ? $"SegEx.Create({Literal(rm.Pattern)}, {Literal(rm.Options)}, {GetTimeoutExpression(rm.MatchTimeout.Value)});" :
+                rm.Options != 0 ? $"SegEx.Create({Literal(rm.Pattern)}, {Literal(rm.Options)});" :
+                $"SegEx.Create({Literal(rm.Pattern)});");
             writer.WriteLine($"}}");
         }
 
@@ -151,81 +155,53 @@ namespace System.Text.RegularExpressions.Generator
         private static void EmitRegexDerivedImplementation(
             IndentedTextWriter writer, RegexMethod rm, string runnerFactoryImplementation, bool allowUnsafe)
         {
-            writer.WriteLine($"/// <summary>Custom <see cref=\"Regex\"/>-derived type for the {rm.MemberName} method.</summary>");
+            // RETARGET: the shell derives from GeneratedSegEx rather than Regex, and the BCL's
+            // pattern/roptions/internalMatchTimeout/factory/Caps/CapNames/capslist/capsize field
+            // assignments collapse into the base(...) call. Group identity goes over as two arrays
+            // indexed by dense capture slot: number[slot] inverts the sparse number->slot mapping
+            // (identity when the mapping is absent), and name[slot] comes straight from capslist,
+            // which is slot-indexed and holds number-strings for unnamed groups.
+            int capsize = rm.Tree.CaptureCount;
+            var groupNumbers = new int[capsize];
+            for (int i = 0; i < capsize; i++)
+            {
+                groupNumbers[i] = i;
+            }
+            if (rm.Tree.CaptureNumberSparseMapping is not null)
+            {
+                foreach (DictionaryEntry en in rm.Tree.CaptureNumberSparseMapping)
+                {
+                    groupNumbers[(int)en.Value!] = (int)en.Key!;
+                }
+            }
+            var groupNames = new string[capsize];
+            for (int i = 0; i < capsize; i++)
+            {
+                groupNames[i] = rm.Tree.CaptureNames is not null ? rm.Tree.CaptureNames[i] : groupNumbers[i].ToString(CultureInfo.InvariantCulture);
+            }
+
+            writer.WriteLine($"/// <summary>Custom <see cref=\"SegEx\"/>-derived type for the {rm.MemberName} method.</summary>");
             writer.WriteLine($"[{s_generatedCodeAttribute}]");
             if (allowUnsafe)
             {
                 writer.WriteLine($"[SkipLocalsInit]");
             }
-            writer.WriteLine($"file sealed class {rm.GeneratedName} : Regex");
+            writer.WriteLine($"file sealed class {rm.GeneratedName} : GeneratedSegEx");
             writer.WriteLine($"{{");
             writer.WriteLine($"    /// <summary>Cached, thread-safe singleton instance.</summary>");
             writer.WriteLine($"    internal static readonly {rm.GeneratedName} Instance = new();");
             writer.WriteLine($"");
             writer.WriteLine($"    /// <summary>Initializes the instance.</summary>");
-            writer.WriteLine($"    private {rm.GeneratedName}()");
+            writer.WriteLine($"    private {rm.GeneratedName}() : base(");
+            writer.WriteLine($"        {Literal(rm.Pattern)},");
+            writer.WriteLine($"        {Literal(rm.Options)},");
+            writer.WriteLine($"        {(rm.MatchTimeout is not null ? GetTimeoutExpression(rm.MatchTimeout.Value) : $"{HelpersTypeName}.{DefaultTimeoutFieldName}")},");
+            writer.WriteLine($"        new int[] {{ {string.Join(", ", groupNumbers)} }},");
+            writer.WriteLine($"        new string[] {{ {string.Join(", ", groupNames.Select(static n => Literal(n)))} }})");
             writer.WriteLine($"    {{");
-            writer.WriteLine($"        base.pattern = {Literal(rm.Pattern)};");
-            writer.WriteLine($"        base.roptions = {Literal(rm.Options)};");
-            if (rm.MatchTimeout is not null)
-            {
-                writer.WriteLine($"        base.internalMatchTimeout = {GetTimeoutExpression(rm.MatchTimeout.Value)};");
-            }
-            else
-            {
-                writer.WriteLine($"        ValidateMatchTimeout({HelpersTypeName}.{DefaultTimeoutFieldName});");
-                writer.WriteLine($"        base.internalMatchTimeout = {HelpersTypeName}.{DefaultTimeoutFieldName};");
-            }
-            writer.WriteLine($"        base.factory = new RunnerFactory();");
-            if (rm.Tree.CaptureNumberSparseMapping is not null)
-            {
-                writer.Write("        base.Caps = new Hashtable {");
-                AppendHashtableContents(writer, rm.Tree.CaptureNumberSparseMapping.Cast<DictionaryEntry>().OrderBy(de => de.Key as int?));
-                writer.WriteLine($" }};");
-            }
-            if (rm.Tree.CaptureNameToNumberMapping is not null)
-            {
-                writer.Write("        base.CapNames = new Hashtable {");
-                AppendHashtableContents(writer, rm.Tree.CaptureNameToNumberMapping.Cast<DictionaryEntry>().OrderBy(de => de.Key as string, StringComparer.Ordinal));
-                writer.WriteLine($" }};");
-            }
-            if (rm.Tree.CaptureNames is not null)
-            {
-                writer.Write("        base.capslist = new string[] {");
-                string separator = "";
-                foreach (string s in rm.Tree.CaptureNames)
-                {
-                    writer.Write(separator);
-                    writer.Write(Literal(s));
-                    separator = ", ";
-                }
-                writer.WriteLine($" }};");
-            }
-            writer.WriteLine($"        base.capsize = {rm.Tree.CaptureCount};");
             writer.WriteLine($"    }}");
             writer.WriteLine(runnerFactoryImplementation);
             writer.WriteLine($"}}");
-
-            static void AppendHashtableContents(IndentedTextWriter writer, IEnumerable<DictionaryEntry> contents)
-            {
-                string separator = "";
-                foreach (DictionaryEntry en in contents)
-                {
-                    writer.Write(separator);
-                    separator = ", ";
-
-                    writer.Write(" { ");
-                    if (en.Key is int key)
-                    {
-                        writer.Write(key);
-                    }
-                    else
-                    {
-                        writer.Write($"\"{en.Key}\"");
-                    }
-                    writer.Write($", {en.Value} }} ");
-                }
-            }
         }
 
         /// <summary>Emits the code for the RunnerFactory.  This is the actual logic for the regular expression.</summary>
@@ -250,15 +226,15 @@ namespace System.Text.RegularExpressions.Generator
                 }
             }
 
-            writer.WriteLine($"/// <summary>Provides a factory for creating <see cref=\"RegexRunner\"/> instances to be used by methods on <see cref=\"Regex\"/>.</summary>");
-            writer.WriteLine($"private sealed class RunnerFactory : RegexRunnerFactory");
-            writer.WriteLine($"{{");
-            writer.WriteLine($"    /// <summary>Creates an instance of a <see cref=\"RegexRunner\"/> used by methods on <see cref=\"Regex\"/>.</summary>");
-            writer.WriteLine($"    protected override RegexRunner CreateInstance() => new Runner();");
+            // RETARGET: GeneratedSegEx replaces the RegexRunnerFactory indirection with a single
+            // CreateRunner override, so the factory wrapper class disappears and the Runner nests
+            // directly in the SegEx-derived type.
+            writer.WriteLine($"/// <summary>Creates a <see cref=\"SegExRunner\"/> instance used by methods on <see cref=\"SegEx\"/>.</summary>");
+            writer.WriteLine($"protected override SegExRunner CreateRunner() => new Runner();");
             writer.WriteLine();
-            writer.WriteLine($"    /// <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>");
-            writer.WriteLine($"    private sealed class Runner : RegexRunner");
-            writer.WriteLine($"    {{");
+            writer.WriteLine($"/// <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>");
+            writer.WriteLine($"private sealed class Runner : SegExRunner");
+            writer.WriteLine($"{{");
             if (rm.MatchTimeout is null)
             {
                 // We need to emit timeout checks for everything other than the developer explicitly setting Timeout.Infinite.
@@ -279,47 +255,46 @@ namespace System.Text.RegularExpressions.Generator
                     ]);
                 }
             }
-            writer.WriteLine($"        /// <summary>Scan the <paramref name=\"inputSpan\"/> starting from base.runtextstart for the next match.</summary>");
-            writer.WriteLine($"        /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
-            writer.WriteLine($"        protected override void Scan(ReadOnlySpan<char> inputSpan)");
-            writer.WriteLine($"        {{");
-            writer.Indent += 3;
+            writer.WriteLine($"    /// <summary>Scan the <paramref name=\"inputSpan\"/> starting from base.runtextstart for the next match.</summary>");
+            writer.WriteLine($"    /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
+            writer.WriteLine($"    protected override void Scan(SegmentedSpan inputSpan)");
+            writer.WriteLine($"    {{");
+            writer.Indent += 2;
             EnterCheckOverflow();
             (bool needsTryFind, bool needsTryMatch) = EmitScan(writer, rm);
             ExitCheckOverflow();
-            writer.Indent -= 3;
-            writer.WriteLine($"        }}");
+            writer.Indent -= 2;
+            writer.WriteLine($"    }}");
             if (needsTryFind)
             {
                 writer.WriteLine();
-                writer.WriteLine($"        /// <summary>Search <paramref name=\"inputSpan\"/> starting from base.runtextpos for the next location a match could possibly start.</summary>");
-                writer.WriteLine($"        /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
-                writer.WriteLine($"        /// <returns>true if a possible match was found; false if no more matches are possible.</returns>");
-                writer.WriteLine($"        private bool TryFindNextPossibleStartingPosition(ReadOnlySpan<char> inputSpan)");
-                writer.WriteLine($"        {{");
-                writer.Indent += 3;
+                writer.WriteLine($"    /// <summary>Search <paramref name=\"inputSpan\"/> starting from base.runtextpos for the next location a match could possibly start.</summary>");
+                writer.WriteLine($"    /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
+                writer.WriteLine($"    /// <returns>true if a possible match was found; false if no more matches are possible.</returns>");
+                writer.WriteLine($"    private bool TryFindNextPossibleStartingPosition(SegmentedSpan inputSpan)");
+                writer.WriteLine($"    {{");
+                writer.Indent += 2;
                 EnterCheckOverflow();
                 EmitTryFindNextPossibleStartingPosition(writer, rm, requiredHelpers, checkOverflow);
                 ExitCheckOverflow();
-                writer.Indent -= 3;
-                writer.WriteLine($"        }}");
+                writer.Indent -= 2;
+                writer.WriteLine($"    }}");
             }
             if (needsTryMatch)
             {
                 writer.WriteLine();
-                writer.WriteLine($"        /// <summary>Determine whether <paramref name=\"inputSpan\"/> at base.runtextpos is a match for the regular expression.</summary>");
-                writer.WriteLine($"        /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
-                writer.WriteLine($"        /// <returns>true if the regular expression matches at the current position; otherwise, false.</returns>");
-                writer.WriteLine($"        private bool TryMatchAtCurrentPosition(ReadOnlySpan<char> inputSpan)");
-                writer.WriteLine($"        {{");
-                writer.Indent += 3;
+                writer.WriteLine($"    /// <summary>Determine whether <paramref name=\"inputSpan\"/> at base.runtextpos is a match for the regular expression.</summary>");
+                writer.WriteLine($"    /// <param name=\"inputSpan\">The text being scanned by the regular expression.</param>");
+                writer.WriteLine($"    /// <returns>true if the regular expression matches at the current position; otherwise, false.</returns>");
+                writer.WriteLine($"    private bool TryMatchAtCurrentPosition(SegmentedSpan inputSpan)");
+                writer.WriteLine($"    {{");
+                writer.Indent += 2;
                 EnterCheckOverflow();
                 EmitTryMatchAtCurrentPosition(writer, rm, requiredHelpers, checkOverflow);
                 ExitCheckOverflow();
-                writer.Indent -= 3;
-                writer.WriteLine($"        }}");
+                writer.Indent -= 2;
+                writer.WriteLine($"    }}");
             }
-            writer.WriteLine($"    }}");
             writer.WriteLine($"}}");
         }
 
@@ -441,7 +416,7 @@ namespace System.Text.RegularExpressions.Generator
                 [
                     $"/// <summary>Determines whether the specified index is a boundary.</summary>",
                     $"[MethodImpl(MethodImplOptions.AggressiveInlining)]",
-                    $"internal static bool {IsBoundary}(ReadOnlySpan<char> inputSpan, int index)",
+                    $"internal static bool {IsBoundary}(SegmentedSpan inputSpan, int index)",
                     $"{{",
                     $"    int indexMinus1 = index - 1;",
                     $"    return {uncheckedKeyword}((uint)indexMinus1 < (uint)inputSpan.Length && {IsBoundaryWordChar}(inputSpan[indexMinus1])) !=",
@@ -464,7 +439,7 @@ namespace System.Text.RegularExpressions.Generator
                     $"/// <summary>Determines whether the specified index is a boundary.</summary>",
                     $"/// <remarks>This variant is only employed when the subsequent character will separately be validated as a word character.</remarks>",
                     $"[MethodImpl(MethodImplOptions.AggressiveInlining)]",
-                    $"internal static bool {IsPreWordCharBoundary}(ReadOnlySpan<char> inputSpan, int index)",
+                    $"internal static bool {IsPreWordCharBoundary}(SegmentedSpan inputSpan, int index)",
                     $"{{",
                     $"    int indexMinus1 = index - 1;",
                     $"    return {uncheckedKeyword}((uint)indexMinus1 >= (uint)inputSpan.Length || !{IsBoundaryWordChar}(inputSpan[indexMinus1]));",
@@ -486,7 +461,7 @@ namespace System.Text.RegularExpressions.Generator
                     $"/// <summary>Determines whether the specified index is a boundary.</summary>",
                     $"/// <remarks>This variant is only employed when the previous character has already been validated as a word character.</remarks>",
                     $"[MethodImpl(MethodImplOptions.AggressiveInlining)]",
-                    $"internal static bool {IsPostWordCharBoundary}(ReadOnlySpan<char> inputSpan, int index) =>",
+                    $"internal static bool {IsPostWordCharBoundary}(SegmentedSpan inputSpan, int index) =>",
                     $"    {uncheckedKeyword}((uint)index >= (uint)inputSpan.Length || !{IsBoundaryWordChar}(inputSpan[index]));",
                 ]);
 
@@ -504,7 +479,7 @@ namespace System.Text.RegularExpressions.Generator
                 [
                     $"/// <summary>Determines whether the specified index is a boundary (ECMAScript).</summary>",
                     $"[MethodImpl(MethodImplOptions.AggressiveInlining)]",
-                    $"internal static bool {IsECMABoundary}(ReadOnlySpan<char> inputSpan, int index)",
+                    $"internal static bool {IsECMABoundary}(SegmentedSpan inputSpan, int index)",
                     $"{{",
                     $"    int indexMinus1 = index - 1;",
                     $"    return {uncheckedKeyword}((uint)indexMinus1 < (uint)inputSpan.Length && {IsECMABoundaryWordChar}(inputSpan[indexMinus1])) !=",
@@ -697,7 +672,7 @@ namespace System.Text.RegularExpressions.Generator
                 var lines = new List<string>();
                 lines.Add($"/// <summary>Finds the next index of any character that matches {EscapeXmlComment(DescribeSet(set))}.</summary>");
                 lines.Add($"[MethodImpl(MethodImplOptions.AggressiveInlining)]");
-                lines.Add($"internal static int {helperName}(this ReadOnlySpan<char> span)");
+                lines.Add($"internal static int {helperName}(this SegmentedSpan span)");
                 lines.Add($"{{");
                 int uncheckedStart = lines.Count;
                 lines.Add(excludedAsciiChars.Count == 128 ? $"    int i = span.IndexOfAnyExceptInRange('\\0', '\\u007f');" : // no ASCII is in the set
@@ -1174,54 +1149,18 @@ namespace System.Text.RegularExpressions.Generator
                         break;
                 }
 
-                string substringAndComparison = $"{substring}_{stringComparison}";
-                string fieldName = "s_indexOfString_";
-                fieldName = IsValidInFieldName(substring) ?
-                    fieldName + substringAndComparison :
-                    GetSHA256FieldName(fieldName, substringAndComparison);
-
-                if (!requiredHelpers.ContainsKey(fieldName))
-                {
-                    requiredHelpers.Add(fieldName,
-                    [
-                        $"/// <summary>Supports searching for the string {EscapeXmlComment(Literal(substring))}.</summary>",
-                        $"internal static readonly SearchValues<string> {fieldName} = SearchValues.Create([{Literal(substring)}], StringComparison.{stringComparison});",
-                    ]);
-                }
+                // RETARGET: upstream routes even a single-string search through SearchValues<string>,
+                // which SegmentedSpan does not implement. A single literal maps cleanly onto the
+                // reader's stitched IndexOf instead, so no fallback routing is needed for this shape.
+                string comparisonArgument = stringComparison == "Ordinal" ? "" : $", StringComparison.{stringComparison}";
 
                 writer.WriteLine($"// The pattern has the literal {Literal(substring)} {offsetDescription}. Find the next occurrence.");
                 writer.WriteLine($"// If it can't be found, there's no match.");
-                writer.WriteLine($"int i = inputSpan.Slice(pos{offset}).IndexOfAny({HelpersTypeName}.{fieldName});");
+                writer.WriteLine($"int i = inputSpan.Slice(pos{offset}).IndexOf({Literal(substring)}{comparisonArgument});");
                 using (EmitBlock(writer, "if (i >= 0)"))
                 {
                     writer.WriteLine("base.runtextpos = pos + i;");
                     writer.WriteLine("return true;");
-                }
-
-                // Determines whether its ok to embed the string in the field name.
-                // This is the same algorithm used by Roslyn.
-                static bool IsValidInFieldName(string s)
-                {
-                    foreach (char c in s)
-                    {
-                        if (char.GetUnicodeCategory(c) is not
-                            (UnicodeCategory.UppercaseLetter or
-                             UnicodeCategory.LowercaseLetter or
-                             UnicodeCategory.TitlecaseLetter or
-                             UnicodeCategory.ModifierLetter or
-                             UnicodeCategory.LetterNumber or
-                             UnicodeCategory.OtherLetter or
-                             UnicodeCategory.DecimalDigitNumber or
-                             UnicodeCategory.ConnectorPunctuation or
-                             UnicodeCategory.SpacingCombiningMark or
-                             UnicodeCategory.NonSpacingMark or
-                             UnicodeCategory.Format))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
                 }
             }
 
@@ -1301,7 +1240,7 @@ namespace System.Text.RegularExpressions.Generator
                 FinishEmitBlock loopBlock = default;
                 if (needLoop)
                 {
-                    writer.WriteLine("ReadOnlySpan<char> span = inputSpan.Slice(pos);");
+                    writer.WriteLine("SegmentedSpan span = inputSpan.Slice(pos);");
                     string upperBound = "span.Length" + (setsToUse > 1 || primarySet.Distance != 0 ? $" - {minRequiredLength - 1}" : "");
                     loopBlock = EmitBlock(writer, $"for (int i = 0; i < {upperBound}; i++)");
                 }
@@ -1523,7 +1462,7 @@ namespace System.Text.RegularExpressions.Generator
                 }
                 using (block)
                 {
-                    writer.WriteLine($"ReadOnlySpan<char> slice = inputSpan.Slice(pos);");
+                    writer.WriteLine($"SegmentedSpan slice = inputSpan.Slice(pos);");
                     writer.WriteLine();
 
                     // Find the literal.  If we can't find it, we're done searching.
@@ -1758,7 +1697,7 @@ namespace System.Text.RegularExpressions.Generator
             {
                 if (defineLocal)
                 {
-                    writer.Write("ReadOnlySpan<char> ");
+                    writer.Write("SegmentedSpan ");
                 }
                 writer.WriteLine($"{sliceSpan} = inputSpan.Slice(pos);");
             }
@@ -4228,7 +4167,7 @@ namespace System.Text.RegularExpressions.Generator
                         }
 
                         string repeaterSpan = "repeaterSlice"; // As this repeater doesn't wrap arbitrary node emits, this shouldn't conflict with anything
-                        writer.WriteLine($"ReadOnlySpan<char> {repeaterSpan} = {sliceSpan}.Slice({sliceStaticPos}, {iterations});");
+                        writer.WriteLine($"SegmentedSpan {repeaterSpan} = {sliceSpan}.Slice({sliceStaticPos}, {iterations});");
 
                         using (EmitBlock(writer, $"for (int i = 0; i < {repeaterSpan}.Length; i++)"))
                         {
@@ -5131,7 +5070,7 @@ namespace System.Text.RegularExpressions.Generator
 
         private static string MatchCharacterClass(string chExpr, string charClass, bool negate, HashSet<string> additionalDeclarations, Dictionary<string, string[]> requiredHelpers)
         {
-            // We need to perform the equivalent of calling RegexRunner.CharInClass(ch, charClass),
+            // We need to perform the equivalent of calling SegExCharClass.CharInClass(ch, charClass),
             // but that call is relatively expensive.  Before we fall back to it, we try to optimize
             // some common cases for which we can do much better, such as known character classes
             // for which we can call a dedicated method, or a fast-path for ASCII using a lookup table.
@@ -5429,7 +5368,7 @@ namespace System.Text.RegularExpressions.Generator
             // 16 bytes per character class.  We of course still need to be able to handle inputs that aren't ASCII, so
             // we check the input against 128, and have a fallback if the input is >= to it.  Determining the right
             // fallback could itself be expensive.  For example, if it's possible that a value >= 128 could match the
-            // character class, we output a call to RegexRunner.CharInClass, but we don't want to have to enumerate the
+            // character class, we output a call to SegExCharClass.CharInClass, but we don't want to have to enumerate the
             // entire character class evaluating every character against it, just to determine whether it's a match.
             // Instead, we employ some quick heuristics that will always ensure we provide a correct answer even if
             // we could have sometimes generated better code to give that answer.
@@ -5499,20 +5438,20 @@ namespace System.Text.RegularExpressions.Generator
 
                 _ => $"({Literal(bitVectorString)}[ch >> 4] & (1 << (ch & 0xF))) {(negate ? "=" : "!")}= 0",
             };
-            return $"((ch = {chExpr}) < 128 ? {asciiExpr} : {(negate ? "!" : "")}RegexRunner.CharInClass((char)ch, {Literal(charClass)}))";
+            return $"((ch = {chExpr}) < 128 ? {asciiExpr} : {(negate ? "!" : "")}SegExCharClass.CharInClass((char)ch, {Literal(charClass)}))";
 
             string EmitContainsNoAscii()
             {
                 return negate ?
-                    $"((ch = {chExpr}) < 128 || !RegexRunner.CharInClass((char)ch, {Literal(charClass)}))" :
-                    $"((ch = {chExpr}) >= 128 && RegexRunner.CharInClass((char)ch, {Literal(charClass)}))";
+                    $"((ch = {chExpr}) < 128 || !SegExCharClass.CharInClass((char)ch, {Literal(charClass)}))" :
+                    $"((ch = {chExpr}) >= 128 && SegExCharClass.CharInClass((char)ch, {Literal(charClass)}))";
             }
 
             string EmitAllAsciiContained()
             {
                 return negate ?
-                    $"((ch = {chExpr}) >= 128 && !RegexRunner.CharInClass((char)ch, {Literal(charClass)}))" :
-                    $"((ch = {chExpr}) < 128 || RegexRunner.CharInClass((char)ch, {Literal(charClass)}))";
+                    $"((ch = {chExpr}) >= 128 && !SegExCharClass.CharInClass((char)ch, {Literal(charClass)}))" :
+                    $"((ch = {chExpr}) < 128 || SegExCharClass.CharInClass((char)ch, {Literal(charClass)}))";
             }
         }
 

@@ -450,10 +450,130 @@ public ref struct SegmentedSpan
         return true;
     }
 
+    /// <summary>Whether this window begins with <paramref name="value"/> under the given comparison.</summary>
+    /// <param name="value">The prefix to test for.</param>
+    /// <param name="comparisonType">
+    /// <see cref="StringComparison.Ordinal"/> or <see cref="StringComparison.OrdinalIgnoreCase"/>. Culture-sensitive
+    /// comparisons cannot be evaluated chunk-by-chunk and are rejected; the generated matcher only ever emits ordinal ones.
+    /// </param>
+    /// <returns><see langword="true"/> if it does.</returns>
+    public bool StartsWith(ReadOnlySpan<char> value, StringComparison comparisonType)
+    {
+        if (comparisonType == StringComparison.Ordinal)
+        {
+            return StartsWith(value);
+        }
+        if (comparisonType != StringComparison.OrdinalIgnoreCase)
+        {
+            throw new ArgumentOutOfRangeException(nameof(comparisonType), "Only ordinal comparisons are supported.");
+        }
+
+        if (value.Length > _length)
+        {
+            return false;
+        }
+
+        var i = 0;
+        while (i < value.Length)
+        {
+            var span = ChunkFrom(i, out _);
+            var take = Math.Min(span.Length, value.Length - i);
+            if (!span.Slice(0, take).Equals(value.Slice(i, take), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            i += take;
+        }
+        return true;
+    }
+
+    /// <summary>Returns the offset of the first occurrence of <paramref name="value"/> under the given comparison, or -1.</summary>
+    /// <param name="value">The characters to find.</param>
+    /// <param name="comparisonType">
+    /// <see cref="StringComparison.Ordinal"/> or <see cref="StringComparison.OrdinalIgnoreCase"/>. Culture-sensitive
+    /// comparisons cannot be evaluated chunk-by-chunk and are rejected; the generated matcher only ever emits ordinal ones.
+    /// </param>
+    /// <returns>The zero-based offset, or -1.</returns>
+    /// <remarks>Same per-chunk search plus boundary stitching as the ordinal overload; see <see cref="IndexOf(ReadOnlySpan{char})"/>.</remarks>
+    public int IndexOf(ReadOnlySpan<char> value, StringComparison comparisonType)
+    {
+        if (comparisonType == StringComparison.Ordinal)
+        {
+            return IndexOf(value);
+        }
+        if (comparisonType != StringComparison.OrdinalIgnoreCase)
+        {
+            throw new ArgumentOutOfRangeException(nameof(comparisonType), "Only ordinal comparisons are supported.");
+        }
+
+        if (value.IsEmpty)
+        {
+            return 0;
+        }
+        if (value.Length > _length)
+        {
+            return -1;
+        }
+
+        var limit = _length - value.Length;
+        var i = 0;
+        while (i <= limit)
+        {
+            var chunk = ChunkFrom(i, out var consumed);
+
+            var found = chunk.IndexOf(value, StringComparison.OrdinalIgnoreCase);
+            if (found >= 0)
+            {
+                return i + found;
+            }
+
+            var straddleFrom = Math.Max(i, consumed - value.Length + 1);
+            var straddleTo = Math.Min(limit, consumed - 1);
+            for (var start = straddleFrom; start <= straddleTo; start++)
+            {
+                if (Slice(start).StartsWith(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return start;
+                }
+            }
+
+            i = consumed;
+        }
+        return -1;
+    }
+
     /// <summary>Whether this window equals <paramref name="other"/> character for character.</summary>
     /// <param name="other">The span to compare against.</param>
     /// <returns><see langword="true"/> if they are equal.</returns>
     public bool SequenceEqual(ReadOnlySpan<char> other) => other.Length == _length && StartsWith(other);
+
+    /// <summary>Whether this window equals <paramref name="other"/> character for character.</summary>
+    /// <param name="other">The window to compare against. May cover a different range of the same or another sequence.</param>
+    /// <returns><see langword="true"/> if they are equal.</returns>
+    /// <remarks>The emitted backreference check compares two windows of the same subject, hence this overload.</remarks>
+    public bool SequenceEqual(SegmentedSpan other)
+    {
+        if (other._length != _length)
+        {
+            return false;
+        }
+
+        // Lockstep walk: each iteration compares the longest run that is contiguous in both windows,
+        // so two identically-chunked windows collapse to full-chunk vectorized compares.
+        var i = 0;
+        while (i < _length)
+        {
+            var mine = ChunkFrom(i, out _);
+            var theirs = other.ChunkFrom(i, out _);
+            var take = Math.Min(mine.Length, theirs.Length);
+            if (!mine.Slice(0, take).SequenceEqual(theirs.Slice(0, take)))
+            {
+                return false;
+            }
+            i += take;
+        }
+        return true;
+    }
 
     /// <summary>
     /// Returns the run of the window starting at <paramref name="i"/> that lives in one chunk, and the

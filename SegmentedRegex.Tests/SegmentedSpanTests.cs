@@ -118,6 +118,11 @@ public class SegmentedSpanTests
             var prefix = subject[..i];
             Assert.True(seg.StartsWith(prefix), $"[{label}] StartsWith(\"{prefix}\")");
             Assert.True(span.SequenceEqual(prefix) == seg.SequenceEqual(prefix), $"[{label}] SequenceEqual(\"{prefix}\")");
+
+            var swapped = prefix.ToUpperInvariant() == prefix ? prefix.ToLowerInvariant() : prefix.ToUpperInvariant();
+            Assert.True(
+                span.StartsWith(swapped, StringComparison.OrdinalIgnoreCase) == seg.StartsWith(swapped, StringComparison.OrdinalIgnoreCase),
+                $"[{label}] StartsWith-OrdinalIgnoreCase(\"{swapped}\")");
         }
 
         // Multi-char search: every substring of the subject must be found where the span finds it, and
@@ -125,6 +130,12 @@ public class SegmentedSpanTests
         foreach (var needle in Needles(subject))
         {
             Assert.True(span.IndexOf(needle) == seg.IndexOf(needle), $"[{label}] IndexOf(\"{needle}\")");
+
+            // Case-swapped needles, so the ignore-case search has to do actual folding to find them.
+            var swapped = needle.ToUpperInvariant() == needle ? needle.ToLowerInvariant() : needle.ToUpperInvariant();
+            Assert.True(
+                span.IndexOf(swapped, StringComparison.OrdinalIgnoreCase) == seg.IndexOf(swapped, StringComparison.OrdinalIgnoreCase),
+                $"[{label}] IndexOf-OrdinalIgnoreCase(\"{swapped}\")");
         }
 
         Assert.True(seg.SequenceEqual(subject), $"[{label}] SequenceEqual(self)");
@@ -132,6 +143,40 @@ public class SegmentedSpanTests
         if (subject.Length > 0)
         {
             Assert.False(seg.StartsWith("" + subject[1..]), $"[{label}] StartsWith(mutated)");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Subjects))]
+    public void SegmentedSequenceEqualAgreesAcrossSegmentationPairs(string subject)
+    {
+        // Every segmentation of the subject must compare equal to canonical segmentations of the same
+        // characters, and windows of it must compare like the corresponding substrings.
+        var contiguous = new SegmentedSpan(new ReadOnlySequence<char>(subject.AsMemory()));
+
+        foreach (var (label, sequence) in Segmentation.All(subject))
+        {
+            var seg = new SegmentedSpan(sequence);
+            Assert.True(seg.SequenceEqual(contiguous), $"[{label}] != contiguous");
+            Assert.True(contiguous.SequenceEqual(seg), $"contiguous != [{label}]");
+
+            if (subject.Length > 0)
+            {
+                var mutated = new SegmentedSpan(Segmentation.Build(subject[..^1], "!"));
+                Assert.False(seg.SequenceEqual(mutated), $"[{label}] == mutated");
+                Assert.False(seg.SequenceEqual(seg.Slice(1)), $"[{label}] == shorter self");
+            }
+
+            // Windows over the same underlying sequence, the shape a backreference check produces.
+            for (var start = 0; start + 2 <= subject.Length; start++)
+            {
+                for (var other = 0; other + 2 <= subject.Length; other++)
+                {
+                    var expected = subject.AsSpan(start, 2).SequenceEqual(subject.AsSpan(other, 2));
+                    var actual = seg.Slice(start, 2).SequenceEqual(seg.Slice(other, 2));
+                    Assert.True(expected == actual, $"[{label}] windows {start}/{other}");
+                }
+            }
         }
     }
 
