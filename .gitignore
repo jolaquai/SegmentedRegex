@@ -370,4 +370,4 @@ FodyWeavers.xsd
 ### CUSTOM ###
 
 # Prevent committing upstream
-SegEx.SourceGen/vendor/
+SegmentedRegex.SourceGen/vendor/

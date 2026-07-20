@@ -49,7 +49,7 @@
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
 
-    <ProjectReference Include="..\SegEx.SourceGen\SegEx.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=$(TargetFramework)" />
+    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=$(TargetFramework)" />
   </ItemGroup>
 
   <Import Project="$(MSBuildProjectDirectory)\_PackSourceGen.targets" />

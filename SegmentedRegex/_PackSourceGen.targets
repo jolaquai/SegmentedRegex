@@ -1,6 +1,6 @@
 <Project>
   <Target Name="_AddBToPack" BeforeTargets="_GetPackageFiles">
-    <MSBuild Projects="..\SegEx.SourceGen\SegEx.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+    <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
       <Output TaskParameter="TargetOutputs" ItemName="_SourceGenOutput" />
     </MSBuild>
     <ItemGroup>
