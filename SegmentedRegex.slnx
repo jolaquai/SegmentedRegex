@@ -1,10 +1,11 @@
 <Solution>
   <Folder Name="/Solution Items/">
     <File Path=".gitignore" />
-    <File Path="Directory.Build.Props" />
+    <File Path="Directory.Build.props" />
     <File Path="LICENSE" />
     <File Path="README.md" />
   </Folder>
   <Project Path="SegmentedRegex.SourceGen/SegmentedRegex.SourceGen.csproj" Id="f5f5ab08-c947-4d45-b0fe-d5cda3c6b890" />
   <Project Path="SegmentedRegex/SegmentedRegex.csproj" />
+  <Project Path="SegmentedRegex.Tests/SegmentedRegex.Tests.csproj" />
 </Solution>

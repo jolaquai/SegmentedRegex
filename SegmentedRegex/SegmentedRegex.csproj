@@ -16,10 +16,14 @@
     <AnalysisMode>recommended</AnalysisMode>
     <AnalysisModePerformance>all</AnalysisModePerformance>
     <AnalysisModeInteroperability>none</AnalysisModeInteroperability>
+
+    <!-- CA1711: the 'Ex' suffix is the library's name, not an accident.
+         CA1510: ArgumentNullException.ThrowIfNull does not exist on netstandard2.0. -->
+    <NoWarn>$(NoWarn);CA1711;CA1510</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
-    <RootNamespace>SegEx</RootNamespace>
+    <RootNamespace>SegmentedRegex</RootNamespace>
 
     <GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">True</GeneratePackageOnBuild>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
@@ -41,6 +45,7 @@
   <ItemGroup>
     <None Include="..\LICENSE;..\README.md" Pack="True" PackagePath="/" />
 
+    <Using Include="System.Buffers" />
     <Using Include="System.Diagnostics" />
 
     <Using Include="System.Runtime.CompilerServices" />
@@ -49,7 +54,9 @@
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
 
-    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=$(TargetFramework)" />
+    <!-- Pinned, not $(TargetFramework): Roslyn requires analyzers/generators to be netstandard2.0,
+         so propagating this project's TFM into it fails NETSDK1005 on the net8.0 leg. -->
+    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
   </ItemGroup>
 
   <Import Project="$(MSBuildProjectDirectory)\_PackSourceGen.targets" />
@@ -64,7 +71,7 @@
     <Compile Remove="**/*.netstandard2.0.cs" />
     <None Include="**/*.netstandard2.0.cs" />
   </ItemGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+  <PropertyGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
     <IsAotCompatible>True</IsAotCompatible>
   </PropertyGroup>
 

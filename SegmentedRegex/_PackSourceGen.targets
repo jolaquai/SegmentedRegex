@@ -1,10 +1,15 @@
 <Project>
-  <Target Name="_AddBToPack" BeforeTargets="_GetPackageFiles">
-    <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+  <!-- The generator ships inside this package rather than as its own. Two things matter here:
+       it must land under analyzers/dotnet/cs/ or Roslyn never loads it as a generator, and the path
+       must not reference $(TargetFramework), which is empty in the outer cross-targeting pack and was
+       putting the assembly loose under lib\ (NU5101/NU5103). netstandard2.0 is pinned for the same
+       reason as the ProjectReference in the .csproj. -->
+  <Target Name="_AddSourceGenToPack" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="_SourceGenOutput" />
     </MSBuild>
     <ItemGroup>
-      <None Include="@(_SourceGenOutput)" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+      <None Include="@(_SourceGenOutput)" Pack="true" PackagePath="analyzers\dotnet\cs\" Visible="false" />
     </ItemGroup>
   </Target>
 </Project>
