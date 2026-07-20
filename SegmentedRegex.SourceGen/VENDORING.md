@@ -40,6 +40,27 @@ SegEx.SourceGen/
 39 files total, all real vendored source at the pinned commit, plus two **hand-written** files that
 are not vendored (see "Hand-written files" below).
 
+## Forked files vs vendored files
+
+Two different things live here, and the distinction is load-bearing:
+
+- **`vendor/`** is a pristine mirror of dotnet/runtime at the pinned commit. Never hand-edit anything
+  in here (except the two documented hand-written files below). `-Mode Apply` overwrites all of it.
+- **`forked/`** holds the three files the segmented retarget actually modifies:
+  `RegexGenerator.cs`, `RegexGenerator.Parser.cs`, `RegexGenerator.Emitter.cs`. These are *ours*. Edit
+  them freely.
+
+`-Mode Apply` **never** copies over anything in `forked/`. Without that carve-out it would silently
+destroy the entire retarget, and `-Mode Check` would not have warned you either, because Check
+compares upstream-at-the-pin against upstream-at-main - it never looks at the local copies at all.
+
+`-Mode Check` still diffs the forked files against upstream, and reports them as `REGEXGENSYNC003`
+rather than `001`, meaning: upstream changed a file you have forked, so re-merge that change into
+`forked/` by hand. Nothing automates that, by design.
+
+Both the move into `forked/` and the retarget edits are separate commits, so
+`git log --follow forked/<file>` shows exactly what diverges from pristine upstream.
+
 ## Staying in sync with upstream
 
 `scripts/Sync-RegexGenUpstream.ps1` is the only supported way to touch `vendor/`. It never does a

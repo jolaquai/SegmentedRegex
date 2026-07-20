@@ -54,8 +54,19 @@ $sparsePaths = @(
     'src/libraries/System.Private.CoreLib/src/System/Diagnostics/CodeAnalysis'
 )
 
+# Files we have FORKED for the segmented retarget. They live in forked/, not vendor/, and are
+# deliberately never copied over by -Mode Apply, because our edits to them are the whole point of
+# the fork. They stay in $files below so -Mode Check still diffs them and tells us when the upstream
+# original moves - that is a signal to re-merge by hand, not something the script can do for us.
+$forked = @(
+    'src/libraries/System.Text.RegularExpressions/gen/RegexGenerator.cs'
+    'src/libraries/System.Text.RegularExpressions/gen/RegexGenerator.Parser.cs'
+    'src/libraries/System.Text.RegularExpressions/gen/RegexGenerator.Emitter.cs'
+)
+
 # the exact files that get copied into vendor/ - everything else pulled by the sparse
 # checkout above is scaffolding we don't need but that cone mode can't exclude at file level.
+# Entries also listed in $forked are checked but not copied.
 $files = @(
     'src/libraries/System.Text.RegularExpressions/gen/RegexGenerator.cs'
     'src/libraries/System.Text.RegularExpressions/gen/RegexGenerator.Parser.cs'
@@ -168,9 +179,19 @@ if ($Mode -eq 'Check') {
         foreach ($f in $changed) {
             # MSBuild canonical error format ("origin : error CODE: message") - Exec's own
             # error-line scraping surfaces each of these individually in the build log.
-            Write-Host "$f : error REGEXGENSYNC001: changed upstream between pinned $pinned and latest $latest"
+            if ($forked -contains $f) {
+                Write-Host "$f : error REGEXGENSYNC003: changed upstream between pinned $pinned and latest $latest, and this file is FORKED in forked/ - -Mode Apply will not overwrite it, so re-merge the change by hand."
+            }
+            else {
+                Write-Host "$f : error REGEXGENSYNC001: changed upstream between pinned $pinned and latest $latest"
+            }
         }
-        Write-Host "`n$($changed.Count) of $($files.Count) vendored file(s) drifted from the pin."
+
+        $forkedChanged = @($changed | Where-Object { $forked -contains $_ })
+        Write-Host "`n$($changed.Count) of $($files.Count) tracked file(s) drifted from the pin."
+        if ($forkedChanged.Count -gt 0) {
+            Write-Host "$($forkedChanged.Count) of those is forked - -Mode Apply skips it, so the retarget must be re-merged manually."
+        }
         Write-Host "Review: git -C `"$cacheClone`" diff $pinned..$latest -- <path>"
         Write-Host "Then:   scripts\Sync-RegexGenUpstream.ps1 -Mode Apply -Sha $latest"
         exit 1
@@ -193,14 +214,21 @@ else {
         git checkout $target --quiet
         New-Item -ItemType Directory -Force $vendorDir | Out-Null
 
+        $copied = 0
         foreach ($f in $files) {
+            # Never clobber a forked file: -Mode Apply would silently destroy the retarget, and
+            # -Mode Check compares upstream to upstream so it would not have warned us either.
+            if ($forked -contains $f) { continue }
+
             $dest = Join-Path $vendorDir ($f -replace '^src/libraries/', '')
             New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
             Copy-Item (Join-Path $cacheClone $f) $dest -Force
+            $copied++
         }
 
         Set-Content $pinFile $target -NoNewline
-        Write-Host "Vendored $($files.Count) files from dotnet/runtime@$target into $vendorDir"
+        Write-Host "Vendored $copied files from dotnet/runtime@$target into $vendorDir"
+        Write-Host "Skipped $($forked.Count) forked file(s) in forked/ - re-merge those by hand if -Mode Check flagged them."
     }
     finally {
         Pop-Location
