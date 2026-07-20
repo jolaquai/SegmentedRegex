@@ -21,10 +21,11 @@ parallel runtime shell, and the generator is retargeted onto it.
   `LastIndexOf`/backwards-iteration reader surface from v1.
 - Positions: flat `int` offsets into the sequence. Subjects longer than `int.MaxValue` chars are
   rejected. `long`/`SequencePosition`-native addressing deferred.
-- TFM support line: the generated fast path requires net8.0+ consumers (emitted code uses
-  `SearchValues` etc., same as upstream's own floor). netstandard2.0 consumers get the fallback
-  engine only. Fix `SegEx.csproj`'s `net8.0-windows` leftover to plain `net8.0` (consider adding
-  `net10.0` later).
+- TFM support line: the generated fast path requires a modern TFM (emitted code uses `SearchValues`
+  etc., same as upstream's own floor). netstandard2.0 consumers get the fallback engine only.
+  **Amended 2026-07-20**: the floor is `net10.0`, not `net8.0` as originally locked - net8.0 leaves
+  support Nov 2026 and net10.0 is LTS to Nov 2028. Shipping TFMs are `netstandard2.0;net10.0`; CI
+  installs SDK 10.0.x, so nothing here may target past net10.0.
 
 ## The input-op surface to retarget
 

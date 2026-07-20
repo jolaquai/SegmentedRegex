@@ -15,13 +15,13 @@ namespace SegmentedRegex;
 /// differ, so diffing against upstream after a drift report stays mechanical.
 /// </para>
 /// <para>
-/// Copied rather than compiled from <c>vendor/</c> directly: the other three quarters of that file is
-/// parse-side code that is dead at runtime, and it does not compile here. It needs <c>SR</c>,
-/// <c>ValueStringBuilder</c> and <c>RegexParseException</c>'s internal constructor, and at line 1585
-/// uses a <c>string.Create</c> overload with a ref struct <c>TState</c> that requires net9.0+ (CS9244),
-/// which would mean giving up the net8.0 floor to compile code that never runs. The serialized set
-/// format still stays pinned to the generator that produces it, which is the point of not calling the
-/// BCL's own implementation.
+/// Copied rather than compiled from <c>vendor/</c> directly. Compiling the whole file in was measured
+/// and does work on net10.0, but it drags in the other three quarters of it - parse-side code that is
+/// dead at runtime - along with the named-block tables, 8 more vendored files, a hand-written
+/// <c>SR</c>, and CS0436/CS8632 suppressions. That took the assembly from 20 KB to 110 KB. The match
+/// side needs none of it: six constants and <c>IsNegated</c>, not even <c>RegexCharClass.Tables.cs</c>.
+/// The serialized set format still stays pinned to the generator that produces it, which is the point
+/// of not simply calling the BCL's own implementation.
 /// </para>
 /// </remarks>
 public static class SegExCharClass
