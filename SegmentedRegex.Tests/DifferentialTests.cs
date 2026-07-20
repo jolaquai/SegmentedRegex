@@ -60,6 +60,20 @@ public class DifferentialTests
         { "a.c", "a\nc", RegexOptions.Singleline },
         { @"\d+ \s+ \d+", "12  34", RegexOptions.IgnorePatternWhitespace },
 
+        // Find-mode coverage. These force the emitter's literal-search paths that the retarget touched
+        // but nothing above exercises. Confirmed via the emitted "// The pattern ..." comments.
+        // FixedDistanceString_LeftToRight: a literal at a fixed non-zero offset (IndexOf(string) at offset).
+        { ".{3}abc", "xxabcyyyabc", RegexOptions.None },
+        { @"\w{2}ing", "a testing going", RegexOptions.None },
+        // LiteralAfterLoop_LeftToRight with a multi-char string literal, loop M==0 (IndexOf(string), no back-walk).
+        { @"\d*px", "ab12px cpx", RegexOptions.None },
+        // Same, ignore-case: exercises the OrdinalIgnoreCase string IndexOf after a loop, a branch distinct
+        // from the ignore-case *leading* literal ("ABC" above).
+        { @"\d*px", "AB12PX cpX", RegexOptions.IgnoreCase },
+        // LiteralAfterLoop_LeftToRight with a single char literal, loop M>0 (IndexOf(char) + backward walk).
+        { @"\w+@", "a@ user@host @x", RegexOptions.None },
+        { "[abc]+!", "aabc! xyz cba!", RegexOptions.None },
+
         // longer subject, past the quadratic-segmentation cutoff
         { @"(\w+)@(\w+)\.com", "mail bob@example.com and eve@test.com end", RegexOptions.None },
     };
