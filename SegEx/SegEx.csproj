@@ -29,7 +29,7 @@
 
     <PackageId>$(AssemblyName)</PackageId>
     <PackageVersion>$(Version)</PackageVersion>
-    <PackageDescription>Regex matching with familiar perf on segmented subjects.</PackageDescription>
+    <PackageDescription>Regex matching with familiar perf on segmented/multipart subjects.</PackageDescription>
     <PackageRequireLicenseAcceptance>False</PackageRequireLicenseAcceptance>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
