@@ -1,6 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+      <CoreVersion>0.1.0</CoreVersion>
+  </PropertyGroup>
+  <Import Project="$(MSBuildProjectDirectory)\_PackSourceGen.targets" />
+  <Import Project="$(MSBuildProjectDirectory)\_Buildcounter.targets"
+          Condition="'$(Configuration)' == 'Debug'" />
+
+  <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
@@ -29,7 +36,7 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSymbols>True</IncludeSymbols>
-    <Version>$(CoreVersion)</Version>
+    <Version Condition="'$(Configuration)' == 'Release'">$(CoreVersion)</Version>
 
     <PackageId>$(AssemblyName)</PackageId>
     <PackageVersion>$(Version)</PackageVersion>
@@ -58,8 +65,6 @@
          so propagating this project's TFM into it fails NETSDK1005 on the net10.0 leg. -->
     <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
   </ItemGroup>
-
-  <Import Project="$(MSBuildProjectDirectory)\_PackSourceGen.targets" />
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Compile Remove="**/*.net.cs" />

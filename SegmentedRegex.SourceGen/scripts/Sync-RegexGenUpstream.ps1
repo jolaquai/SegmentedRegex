@@ -113,10 +113,28 @@ $files = @(
     'src/libraries/Common/src/Polyfills/EncodingPolyfills.cs'
 )
 
+function Test-CloneUsable {
+    # The cache lives under %TEMP%, which cleanup tools purge - often leaving the directory tree behind
+    # without a working repository. Testing for the directory alone would then take the fetch path below
+    # and quietly operate on a non-repo, so probe the repository itself.
+    if (-not (Test-Path $cacheClone)) { return $false }
+    Push-Location $cacheClone
+    try {
+        git rev-parse --git-dir 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+    finally { Pop-Location }
+}
+
 function Ensure-SparseClone {
-    if (-not (Test-Path $cacheClone)) {
+    if (-not (Test-CloneUsable)) {
+        if (Test-Path $cacheClone) {
+            Write-Host "Cache at $cacheClone exists but is not a usable clone (temp cleanup?); recreating it."
+            Remove-Item -Recurse -Force $cacheClone
+        }
         Write-Host "Creating blobless partial clone (one-time, cheap - no blobs downloaded yet)..."
         git clone --filter=blob:none --no-checkout --sparse $repoUrl $cacheClone
+        if ($LASTEXITCODE -ne 0) { throw "git clone of $repoUrl failed (exit $LASTEXITCODE)." }
         Push-Location $cacheClone
         git sparse-checkout init --cone
         Pop-Location
@@ -134,8 +152,20 @@ function Ensure-SparseClone {
 }
 
 function Get-CurrentPin {
-    if (Test-Path $pinFile) { return (Get-Content $pinFile -Raw).Trim() }
+    if (Test-Path $pinFile) {
+        # -Raw yields $null for an empty file, so guard before trimming.
+        $raw = Get-Content $pinFile -Raw
+        if (-not [string]::IsNullOrWhiteSpace($raw)) { return $raw.Trim() }
+    }
     return $null
+}
+
+function Get-UpstreamHead {
+    $head = git rev-parse origin/main
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
+        throw "could not resolve origin/main in the clone cache at $cacheClone. Delete that directory and re-run to re-clone."
+    }
+    return $head.Trim()
 }
 
 if ($Mode -eq 'Check') {
@@ -156,7 +186,7 @@ if ($Mode -eq 'Check') {
             Write-Host "$pinFile : error REGEXGENSYNC002: no pin recorded yet - run -Mode Apply -Sha <commit> first."
             exit 2
         }
-        $latest = (git rev-parse origin/main).Trim()
+        $latest = Get-UpstreamHead
         Write-Host "Pinned:  $pinned"
         Write-Host "Latest:  $latest"
 

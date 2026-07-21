@@ -76,6 +76,11 @@ and reused across runs.
 .\scripts\Sync-RegexGenUpstream.ps1 -Mode Apply -Sha <new-commit-sha>
 ```
 
+The clone cache lives under `%TEMP%`, so cleanup tools purge it periodically - often leaving the
+directory behind without a working repository. The script probes the repo (not just the directory)
+and re-clones when it finds a husk, so that heals itself; it used to surface as a confusing
+`REGEXGENSYNC000: You cannot call a method on a null-valued expression`.
+
 `-Mode Check` diffs only the ~39 tracked files (not "did anything in the repo change") between the
 pinned SHA and `origin/main`, and exits:
 - **0** — clean, either no upstream movement or upstream moved but none of the tracked files did.

@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <BuildCounterFile>$(MSBuildProjectDirectory)\.buildcounter</BuildCounterFile>
+  </PropertyGroup>
+
+  <Target Name="IncrementBuildCounter" BeforeTargets="ResolveReferences;CoreCompile;BeforeBuild;Restore;Pack">
+    <ReadLinesFromFile File="$(BuildCounterFile)" Condition="Exists('$(BuildCounterFile)')">
+      <Output TaskParameter="Lines" ItemName="_BuildCounterLine" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_BuildCounterPrev Condition="'@(_BuildCounterLine)' != ''">@(_BuildCounterLine)</_BuildCounterPrev>
+      <_BuildCounterPrev Condition="'$(_BuildCounterPrev)' == ''">0</_BuildCounterPrev>
+      <BuildCounter>$([MSBuild]::Add($(_BuildCounterPrev), 1))</BuildCounter>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildCounterFile)" Lines="$(BuildCounter)" Overwrite="true" />
+    <PropertyGroup>
+      <VersionSuffix>alpha$(BuildCounter.PadLeft(3,'0'))</VersionSuffix>
+      <Version>$(CoreVersion)-$(VersionSuffix)</Version>
+    </PropertyGroup>
+  </Target>
+</Project>
