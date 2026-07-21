@@ -120,13 +120,64 @@ var m = MyRegex().Match(sb.ToString());
 var m = MySegEx().Match(sb);
 ```
 
+### Reader primitives in isolation
+
+`ReaderPrimitiveBenchmarks` measures each `SegmentedSpan` operation against its `ReadOnlySpan<char>`
+equivalent over the same contiguous characters, to attribute the end-to-end numbers to a primitive
+rather than guessing from the code.
+
+| Operation, 4096 chars | span | `SegmentedSpan` | Ratio |
+|---|---:|---:|---:|
+| index every character | 776 ns | 2,010 ns | 2.6x |
+| slice per position | 1,299 ns | 1,295 ns | **1.0x** |
+| 1-char `SequenceEqual` per position | 2,701 ns | 133,020 ns | **171x** |
+
+Slicing is free - it is not the ~72-byte struct copy it looks like, so there is nothing to win there.
+Indexing costs 2.6x, which lines up with `\d+` at 3.4x end to end. And short `SequenceEqual` is
+catastrophic, which is the whole of the `(\w)\1` result.
+
+## Optimization work: what has been tried
+
+Three changes were prototyped against the primitive and end-to-end benchmarks. **None are committed**,
+because the most effective one also causes a regression that is not yet understood.
+
+| Change | `(\w)\1` | `\d+` | `needle` | `(\w+)@(\w+)\.com` |
+|---|---:|---:|---:|---:|
+| baseline | 10.3x | 3.0x | 1.15x | **1.85x** |
+| prime the chunk cache in the constructor | 5.2x | 1.4x | 1.08x | **4.6x** |
+| ...plus a `SequenceEqual` fast path and `in` parameter | 4.4-5.0x | 1.3-1.4x | 1.08x | 4.6-4.8x |
+
+**Cache priming** is the big lever. `Slice` is `readonly` and returns a copy, so a cache warmed by a
+temporary is discarded with it - an unprimed reader re-seeks from the start on every derived slice,
+which is exactly what the emitted backreference does per candidate position. Priming the first chunk
+in the constructor roughly halves `(\w)\1` and more than halves `\d+`.
+
+It also makes the email pattern **2.5x slower**, reproducibly, bisected to that change alone. Nothing
+in it should touch a `LiteralAfterLoop` pattern - one extra `TryGet` per scan cannot account for
+thousands of nanoseconds - so the mechanism is still unknown, and it needs a profiler rather than more
+reading. Shipping a 2x win on two patterns alongside an unexplained 2.5x loss on a third is not a
+trade worth making blind.
+
+The `SequenceEqual` fast path for windows inside their cached chunks was worth almost nothing
+(62.8x -> 59.7x on the primitive), so the chunk-walking loop is not the cost. Taking the parameter as
+`in` rather than by value was worth 1.7x (59.7x -> 34.7x), confirming that copying the struct into a
+call is real - but even together these leave short `SequenceEqual` at ~35x a raw span compare, so
+there is a floor here that local tweaks will not get past.
+
 ## What this says about the next optimization pass
 
 In rough order of value:
 
-1. The per-character read path (`SegmentedSpan` indexer and `Slice`) is what makes `(\w)\1` 11x and
-   `\d+` 3.4x. That is the single biggest lever.
-2. Small-chunk degeneration - worth checking whether operations can consume a chunk at a time rather
-   than re-probing the cache per character.
-3. `RegexOptions.Compiled` for the fallback engine would recover much of its ~10x, at the cost of JIT
+1. **Understand the email regression under cache priming**, with a profiler. It gates the single
+   biggest win available, and no amount of code reading has explained it.
+2. The per-character read path. Indexing is 2.6x; the indexer bounds-checks twice (once against the
+   window, once inside `_chunk[local]`), which `Unsafe.Add` past the cache-hit test would remove.
+3. Short `SequenceEqual` has a floor well above a span compare even after the above. If backreferences
+   matter, the emitter could compare single characters directly instead of going through a window
+   compare at all.
+4. Small-chunk degeneration: below roughly vector width per chunk everything falls apart. Worth
+   checking whether operations can consume a chunk at a time rather than re-probing per character.
+5. `RegexOptions.Compiled` for the fallback engine would recover much of its ~10x, at the cost of JIT
    time on first use. A judgement call, not an obvious win.
+
+Do not bother optimizing `Slice`; it is already at parity.
