@@ -136,12 +136,19 @@ namespace System.Text.RegularExpressions.Generator
             writer.WriteLine($"[{s_generatedCodeAttribute}]");
             writer.WriteLine($"{visibility} static class {rm.GeneratedName}");
             writer.WriteLine($"{{");
+            // RETARGET: CultureInvariant is forced on. The generated path resolves IgnoreCase folding at
+            // generation time against the invariant culture, but a Regex built here would fold using
+            // whatever culture the process is in when the singleton initializes. Without this, two
+            // [GeneratedSegEx] patterns with identical options could fold differently purely because one
+            // was code-generatable and the other was not - an engine choice the caller never made. It is
+            // a no-op unless IgnoreCase is set. A named cultureName cannot be honored here (Regex takes no
+            // culture), which is why the attribute documents it as generated-path only.
+            RegexOptions fallbackOptions = rm.Options | RegexOptions.CultureInvariant;
             writer.WriteLine($"    /// <summary>Cached, thread-safe singleton instance.</summary>");
             writer.Write($"    internal static readonly SegEx Instance = ");
             writer.WriteLine(
-                rm.MatchTimeout is not null ? $"SegEx.Create({Literal(rm.Pattern)}, {Literal(rm.Options)}, {GetTimeoutExpression(rm.MatchTimeout.Value)});" :
-                rm.Options != 0 ? $"SegEx.Create({Literal(rm.Pattern)}, {Literal(rm.Options)});" :
-                $"SegEx.Create({Literal(rm.Pattern)});");
+                rm.MatchTimeout is not null ? $"SegEx.Create({Literal(rm.Pattern)}, {Literal(fallbackOptions)}, {GetTimeoutExpression(rm.MatchTimeout.Value)});" :
+                $"SegEx.Create({Literal(rm.Pattern)}, {Literal(fallbackOptions)});");
             writer.WriteLine($"}}");
         }
 
