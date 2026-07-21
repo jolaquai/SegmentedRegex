@@ -95,6 +95,10 @@ public abstract class SegEx
     /// <remarks>A span cannot be retained, so this overload copies the input.</remarks>
     public bool IsMatch(ReadOnlySpan<char> input) => IsMatch(Wrap(input));
 
+    /// <inheritdoc cref="IsMatch(in ReadOnlySequence{char})"/>
+    /// <inheritdoc cref="StringBuilderExtensions.AsSequence(StringBuilder)" path="/remarks"/>
+    public bool IsMatch(StringBuilder input) => IsMatch(input.AsSequence());
+
     /// <inheritdoc cref="Match(in ReadOnlySequence{char})"/>
     public SegExMatch Match(string input) => Match(Wrap(input));
 
@@ -108,6 +112,10 @@ public abstract class SegEx
     /// <remarks>A span cannot be retained, so this overload copies the input.</remarks>
     public SegExMatch Match(ReadOnlySpan<char> input) => Match(Wrap(input));
 
+    /// <inheritdoc cref="Match(in ReadOnlySequence{char})"/>
+    /// <inheritdoc cref="StringBuilderExtensions.AsSequence(StringBuilder)" path="/remarks"/>
+    public SegExMatch Match(StringBuilder input) => Match(input.AsSequence());
+
     /// <inheritdoc cref="Matches(in ReadOnlySequence{char})"/>
     public SegExMatchCollection Matches(string input) => Matches(Wrap(input));
 
@@ -120,6 +128,10 @@ public abstract class SegEx
     /// <inheritdoc cref="Matches(in ReadOnlySequence{char})"/>
     /// <remarks>A span cannot be retained, so this overload copies the input.</remarks>
     public SegExMatchCollection Matches(ReadOnlySpan<char> input) => Matches(Wrap(input));
+
+    /// <inheritdoc cref="Matches(in ReadOnlySequence{char})"/>
+    /// <inheritdoc cref="StringBuilderExtensions.AsSequence(StringBuilder)" path="/remarks"/>
+    public SegExMatchCollection Matches(StringBuilder input) => Matches(input.AsSequence());
 
     /// <inheritdoc/>
     public override string ToString() => Pattern;

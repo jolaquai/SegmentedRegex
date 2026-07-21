@@ -82,6 +82,44 @@ copying 256 characters is trivial next to a reader degenerating on 4-character c
 The fallback's cost is also not mostly copying: `SegEx.Create` builds an **interpreted** `Regex`, so
 even the zero-copy contiguous rows run ~10x slower than a source-generated matcher.
 
+### Matching a `StringBuilder`
+
+The scenario the library exists for. A builder already stores its text as a chain of chunks, so
+`sb.AsSequence()` views them with no copying; `Regex` has no non-contiguous input and must flatten the
+builder first. Three ways to do it, `IsMatch`, same content:
+
+| Pattern | Length | `sb.ToString()` | rent + `CopyTo` | `SegEx` over chunks |
+|---|---:|---:|---:|---:|
+| `\d+` | 1,024 | 94 ns / 2,072 B | **56 ns / 0 B** | 136 ns / 144 B |
+| `\d+` | 16,384 | 1,211 ns / 32,792 B | 706 ns / 0 B | **572 ns / 384 B** |
+| `\d+` | 262,144 | 90,377 ns / 524,480 B | 12,530 ns / 0 B | **6,584 ns / 2,184 B** |
+| `needle` | 1,024 | 107 ns / 2,072 B | **69 ns / 0 B** | 189 ns / 144 B |
+| `needle` | 16,384 | 1,413 ns / 32,792 B | **910 ns / 0 B** | 1,018 ns / 384 B |
+| `needle` | 262,144 | 94,298 ns / 524,480 B | 17,305 ns / 0 B | **10,805 ns / 2,184 B** |
+
+The crossover is around 16K characters. Below it the copy is too cheap to matter and our per-character
+overhead dominates, so a rented buffer wins. Above it not copying wins outright: at 256K we are 8.7x
+to 13.7x faster than `ToString()`, and still **1.6x to 1.9x faster than a hand-rolled rent-and-copy**,
+which is the interesting part - the copy costs more than our entire scan disadvantage.
+
+Allocation is not zero: `AsSequence()` creates one small link object per builder chunk, which is the
+144 B - 2,184 B above (240x below `ToString()`, but above a pooled buffer's zero). A caller that holds
+the sequence and matches repeatedly against an unchanged builder pays it once instead of per call.
+
+There is also a capability difference, not just a speed one. Confirmed against the shipped surface:
+`Regex.Match` and `Regex.Matches` are **string-only**; every span overload is `IsMatch`, `Count` or
+`EnumerateMatches`, and `ValueMatch` carries just an index and a length. So the zero-allocation rented
+path cannot give you capture groups at all - needing groups from a builder forces the `ToString()`
+row, at 90 us and half a megabyte. `SegEx` returns full groups and captures straight off the chunks:
+
+```csharp
+// Regex: must materialize the whole builder to get groups
+var m = MyRegex().Match(sb.ToString());
+
+// SegEx: matched in place
+var m = MySegEx().Match(sb);
+```
+
 ## What this says about the next optimization pass
 
 In rough order of value:
