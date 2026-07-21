@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+
+    <IsPackable>False</IsPackable>
+    <!-- Kept out of dotnet test: this is a console app, not a test project. -->
+    <IsTestProject>False</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.Buffers" />
+    <Using Include="System.Text" />
+    <Using Include="System.Text.RegularExpressions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SegmentedRegex\SegmentedRegex.csproj" />
+    <!-- Analyzers do not flow transitively through the reference above, so the generator is wired up
+         explicitly - otherwise [GeneratedSegEx] here would never be implemented. -->
+    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+</Project>

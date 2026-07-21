@@ -7,4 +7,5 @@
   <Project Path="SegmentedRegex.SourceGen/SegmentedRegex.SourceGen.csproj" Id="f5f5ab08-c947-4d45-b0fe-d5cda3c6b890" />
   <Project Path="SegmentedRegex/SegmentedRegex.csproj" />
   <Project Path="SegmentedRegex.Tests/SegmentedRegex.Tests.csproj" />
+  <Project Path="SegmentedRegex.Benchmarks/SegmentedRegex.Benchmarks.csproj" />
 </Solution>
