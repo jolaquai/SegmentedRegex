@@ -371,3 +371,5 @@ FodyWeavers.xsd
 
 # Prevent committing upstream
 # SegmentedRegex.SourceGen/vendor/
+# Local build number used by SegmentedRegex/_Buildcounter.targets (Debug only); churns on every build.
+.buildcounter

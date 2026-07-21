@@ -1,21 +1,27 @@
 <Project>
+  <!-- Local build numbering. Imported for Debug only: Release must stay exactly $(CoreVersion) so the
+       release workflow publishes and tags a clean version. -->
   <PropertyGroup>
     <BuildCounterFile>$(MSBuildProjectDirectory)\.buildcounter</BuildCounterFile>
+
+    <!-- Read during EVALUATION, not inside a target. Version has to be settled before evaluation ends:
+         PackageVersion and the assembly-info properties are expanded then, so a Version assigned from a
+         target arrives too late and Pack silently emits 1.0.0. Reading here also means every
+         TargetFramework leg sees the same number instead of each advancing its own. -->
+    <_BuildCounterRaw Condition="Exists('$(BuildCounterFile)')">$([System.IO.File]::ReadAllText('$(BuildCounterFile)'))</_BuildCounterRaw>
+    <_BuildCounter>$(_BuildCounterRaw.Trim())</_BuildCounter>
+    <_BuildCounter Condition="'$(_BuildCounter)' == ''">0</_BuildCounter>
+
+    <Version>$(CoreVersion)-alpha$(_BuildCounter.PadLeft(3,'0'))</Version>
   </PropertyGroup>
 
-  <Target Name="IncrementBuildCounter" BeforeTargets="ResolveReferences;CoreCompile;BeforeBuild;Restore;Pack">
-    <ReadLinesFromFile File="$(BuildCounterFile)" Condition="Exists('$(BuildCounterFile)')">
-      <Output TaskParameter="Lines" ItemName="_BuildCounterLine" />
-    </ReadLinesFromFile>
+  <!-- Advance once per build. Cross-targeting runs the outer instance with an empty TargetFramework and
+       one inner instance per TFM; keying on the outer keeps a two-TFM build to a single increment.
+       A build pinned to one TFM (-f) leaves the counter alone, which is fine for a local build number. -->
+  <Target Name="IncrementBuildCounter" AfterTargets="Build" Condition="'$(TargetFramework)' == ''">
     <PropertyGroup>
-      <_BuildCounterPrev Condition="'@(_BuildCounterLine)' != ''">@(_BuildCounterLine)</_BuildCounterPrev>
-      <_BuildCounterPrev Condition="'$(_BuildCounterPrev)' == ''">0</_BuildCounterPrev>
-      <BuildCounter>$([MSBuild]::Add($(_BuildCounterPrev), 1))</BuildCounter>
+      <_NextBuildCounter>$([MSBuild]::Add($(_BuildCounter), 1))</_NextBuildCounter>
     </PropertyGroup>
-    <WriteLinesToFile File="$(BuildCounterFile)" Lines="$(BuildCounter)" Overwrite="true" />
-    <PropertyGroup>
-      <VersionSuffix>alpha$(BuildCounter.PadLeft(3,'0'))</VersionSuffix>
-      <Version>$(CoreVersion)-$(VersionSuffix)</Version>
-    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildCounterFile)" Lines="$(_NextBuildCounter)" Overwrite="true" />
   </Target>
 </Project>
