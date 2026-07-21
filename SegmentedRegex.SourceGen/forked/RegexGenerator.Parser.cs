@@ -21,6 +21,8 @@ namespace System.Text.RegularExpressions.Generator
         // so the BCL generator and this one can coexist in the same project without double-firing.
         private const string RegexName = "SegmentedRegex.SegEx";
         private const string GeneratedRegexAttributeName = "SegmentedRegex.GeneratedSegExAttribute";
+        /// <summary>The base the emitted matcher derives from; present only on TFMs that ship the segment-native runtime.</summary>
+        private const string GeneratedSegExName = "SegmentedRegex.GeneratedSegEx";
 
         /// <summary>
         /// Returns null if nothing to do, a <see cref="Diagnostic"/> if there's an error to report,
@@ -211,8 +213,12 @@ namespace System.Text.RegularExpressions.Generator
                 ns ?? string.Empty,
                 $"{typeDec.Identifier}{typeDec.TypeParameterList}");
 
+            // RETARGET: probe for the base the emitted matcher derives from. Absent on netstandard2.0,
+            // where only the fallback engine ships.
+            bool hasSegmentNativeRuntime = compilation.GetBestTypeByMetadataName(GeneratedSegExName) is not null;
+
             var compilationData = compilation is CSharpCompilation { LanguageVersion: LanguageVersion langVersion, Options: CSharpCompilationOptions compilationOptions }
-                ? new CompilationData(compilationOptions.AllowUnsafe, compilationOptions.CheckOverflow, langVersion)
+                ? new CompilationData(compilationOptions.AllowUnsafe, compilationOptions.CheckOverflow, langVersion, hasSegmentNativeRuntime)
                 : default;
 
             var result = new RegexPatternAndSyntax(

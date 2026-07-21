@@ -21,6 +21,18 @@ internal static class GeneratorHarness
             .Where(static d => d.Severity == DiagnosticSeverity.Error);
     }
 
+    /// <summary>
+    /// Runs the generator against a compilation that cannot see the real SegmentedRegex assembly, so the
+    /// segment-native runtime types are absent - the shape a netstandard2.0 consumer has, where those
+    /// types are excluded from the lib leg but the analyzer still runs. The snippet supplies its own
+    /// minimal SegEx and attribute.
+    /// </summary>
+    internal static Result RunWithoutSegmentNativeRuntime(string source)
+    {
+        var (_, output, generatorDiagnostics, _) = RunCore(source, includeSegmentedRegex: false);
+        return new Result(output, generatorDiagnostics, []);
+    }
+
     internal static Result Run(string source)
     {
         var (_, output, generatorDiagnostics, updated) = RunCore(source);
@@ -59,12 +71,12 @@ internal static class GeneratorHarness
         return assembly.GetType(typeName, throwOnError: true);
     }
 
-    private static (CSharpCompilation Original, string Output, ImmutableArray<Diagnostic> GeneratorDiagnostics, Compilation Updated) RunCore(string source)
+    private static (CSharpCompilation Original, string Output, ImmutableArray<Diagnostic> GeneratorDiagnostics, Compilation Updated) RunCore(string source, bool includeSegmentedRegex = true)
     {
         var compilation = CSharpCompilation.Create(
             $"GeneratorTestAssembly_{Guid.NewGuid():N}",
             [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview))],
-            ReferenceSet(),
+            ReferenceSet(includeSegmentedRegex),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
@@ -80,20 +92,26 @@ internal static class GeneratorHarness
         return (compilation, output, generatorDiagnostics, updated);
     }
 
-    private static List<MetadataReference> ReferenceSet()
+    private static List<MetadataReference> ReferenceSet(bool includeSegmentedRegex = true)
     {
+        var segex = typeof(SegEx).Assembly;
+
         var references = new List<MetadataReference>();
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
-            if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
+            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
             {
-                references.Add(MetadataReference.CreateFromFile(assembly.Location));
+                continue;
             }
+            if (!includeSegmentedRegex && assembly == segex)
+            {
+                continue;
+            }
+            references.Add(MetadataReference.CreateFromFile(assembly.Location));
         }
 
         // SegmentedRegex itself may not be loaded yet when the first test runs, so make sure it is.
-        var segex = typeof(SegEx).Assembly;
-        if (!references.Any(r => string.Equals(r.Display, segex.Location, StringComparison.OrdinalIgnoreCase)))
+        if (includeSegmentedRegex && !references.Any(r => string.Equals(r.Display, segex.Location, StringComparison.OrdinalIgnoreCase)))
         {
             references.Add(MetadataReference.CreateFromFile(segex.Location));
         }

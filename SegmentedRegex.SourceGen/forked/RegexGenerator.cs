@@ -42,7 +42,11 @@ namespace System.Text.RegularExpressions.Generator
 #endif
         ];
 
-        internal record struct CompilationData(bool AllowUnsafe, bool CheckOverflow, LanguageVersion LanguageVersion);
+        // RETARGET: HasSegmentNativeRuntime records whether the *consuming* compilation can actually see
+        // the segment-native runtime types. They live in *.net.cs and are excluded from the netstandard2.0
+        // lib leg, but the analyzer still runs for such consumers, so this is what keeps it from emitting a
+        // matcher that cannot compile there.
+        internal record struct CompilationData(bool AllowUnsafe, bool CheckOverflow, LanguageVersion LanguageVersion, bool HasSegmentNativeRuntime);
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -345,6 +349,16 @@ namespace System.Text.RegularExpressions.Generator
             if (languageVersion < LanguageVersion.CSharp11)
             {
                 reason = "the language version must be C# 11 or higher.";
+                return false;
+            }
+
+            // RETARGET: the segment-native runtime (GeneratedSegEx/SegExRunner/SegmentedSpan) lives in
+            // *.net.cs and is not in the netstandard2.0 lib leg, but the analyzer still runs for those
+            // consumers. Without this they would get generated code referencing types their target
+            // framework does not have; the fallback engine is available everywhere SegEx is.
+            if (!method.CompilationData.HasSegmentNativeRuntime)
+            {
+                reason = "the target framework does not ship the segment-native runtime (netstandard2.0 gets the fallback engine)";
                 return false;
             }
 

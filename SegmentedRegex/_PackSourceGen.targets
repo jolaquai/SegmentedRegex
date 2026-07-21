@@ -5,6 +5,10 @@
        putting the assembly loose under lib\ (NU5101/NU5103). netstandard2.0 is pinned for the same
        reason as the ProjectReference in the .csproj. -->
   <Target Name="_AddSourceGenToPack" BeforeTargets="_GetPackageFiles">
+    <!-- Build before asking for the path. GetTargetPath only reports where the assembly *would* be; on
+         its own it will happily hand back a stale one built for an earlier edit or a different
+         configuration, and the package then ships a generator that does not match the source. -->
+    <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
     <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="_SourceGenOutput" />
     </MSBuild>
