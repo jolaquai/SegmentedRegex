@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <!-- LangVersion latest is the realistic case: without it netstandard2.0 defaults to C# 7.3 and the
+         generator declines on language version alone, which would hide whether the TFM is handled. -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SegmentedRegexPackageVersion Condition="'$(SegmentedRegexPackageVersion)' == ''">0.1.0-*</SegmentedRegexPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SegmentedRegex" Version="$(SegmentedRegexPackageVersion)" />
+  </ItemGroup>
+
+</Project>

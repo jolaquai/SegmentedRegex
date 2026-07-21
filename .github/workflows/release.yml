@@ -77,16 +77,19 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: echo "yes=true" >> "$GITHUB_OUTPUT"
 
-      # Directory.Build.props' CoreVersion is the single source of truth: it's
-      # what the package is stamped with, and it's what the release tag tracks.
+      # SegmentedRegex.csproj's CoreVersion is the single source of truth: it's what the
+      # package is stamped with in Release, and it's what the release tag tracks. It used to
+      # live in Directory.Build.props; if it moves again, this step fails loudly rather than
+      # silently publishing 1.0.0.
       - name: Read version
         id: ver
         if: steps.ismain.outputs.yes == 'true'
         shell: pwsh
         run: |
-          [xml]$p = Get-Content Directory.Build.props
+          $proj = "SegmentedRegex/SegmentedRegex.csproj"
+          [xml]$p = Get-Content $proj
           $v = ($p.Project.PropertyGroup.CoreVersion | Where-Object { $_ }) | Select-Object -First 1
-          if (-not $v) { throw "No <CoreVersion> found in Directory.Build.props." }
+          if (-not $v) { throw "No <CoreVersion> found in $proj." }
           $v = "$v".Trim()
           "version=$v" >> $env:GITHUB_OUTPUT
           "tag=v$v" >> $env:GITHUB_OUTPUT

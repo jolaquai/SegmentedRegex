@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="nuget.config" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="PackageConsumer/PackageConsumer.csproj" />
+  <Project Path="NetStandardConsumer/NetStandardConsumer.csproj" />
+</Solution>

@@ -74,5 +74,49 @@ internal sealed class Segmentation : ReadOnlySequenceSegment<char>
         {
             yield return ($"empties@{i}", Build("", subject[..i], "", subject[i..], ""));
         }
+
+        // Irregular many-chunk layouts for subjects too long for the exhaustive double-split above.
+        // Repeated cut points collapse into empty segments, which is intentional.
+        if (n > 12)
+        {
+            var rng = new Random(StableSeed(subject));
+            for (var trial = 0; trial < 8; trial++)
+            {
+                var cuts = new int[rng.Next(2, Math.Min(n, 8) + 1)];
+                for (var c = 0; c < cuts.Length; c++)
+                {
+                    cuts[c] = rng.Next(0, n + 1);
+                }
+                Array.Sort(cuts);
+
+                var parts = new string[cuts.Length + 1];
+                var previous = 0;
+                for (var c = 0; c < cuts.Length; c++)
+                {
+                    parts[c] = subject[previous..cuts[c]];
+                    previous = cuts[c];
+                }
+                parts[^1] = subject[previous..];
+
+                yield return ($"random{trial}", Build(parts));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A per-subject seed that is stable across runs. <see cref="string.GetHashCode()"/> is randomized
+    /// per process, which would make a failing segmentation impossible to reproduce.
+    /// </summary>
+    private static int StableSeed(string subject)
+    {
+        unchecked
+        {
+            var seed = 17;
+            foreach (var c in subject)
+            {
+                seed = (seed * 31) + c;
+            }
+            return seed;
+        }
     }
 }

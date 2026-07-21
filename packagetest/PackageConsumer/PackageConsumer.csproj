@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Floats to the newest prerelease in the feed, so a freshly packed build is picked up without
+         editing this file. Pin one with -p:SegmentedRegexPackageVersion=<exact>. -->
+    <SegmentedRegexPackageVersion Condition="'$(SegmentedRegexPackageVersion)' == ''">0.1.0-*</SegmentedRegexPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Deliberately a PackageReference, never a ProjectReference: the point is to load the generator
+         from analyzers/dotnet/cs/ inside the built package, the way a third party gets it. -->
+    <PackageReference Include="SegmentedRegex" Version="$(SegmentedRegexPackageVersion)" />
+  </ItemGroup>
+
+</Project>
