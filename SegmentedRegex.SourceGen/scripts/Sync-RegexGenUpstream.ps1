@@ -35,9 +35,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoUrl = 'https://github.com/dotnet/runtime.git'
 $root = Split-Path -Parent $PSScriptRoot
-$vendorDir = Join-Path $root 'vendor\dotnet-runtime'
+$vendorDir = Join-Path $root 'vendor' 'dotnet-runtime'
 $pinFile = Join-Path $vendorDir 'UPSTREAM_SHA.txt'
-$cacheClone = Join-Path $env:TEMP 'dotnet-runtime-sparse-cache'
+# $env:TEMP is a Windows-ism and is empty on Linux/macOS runners; GetTempPath() resolves
+# TMPDIR/-tmp- correctly on every OS pwsh runs on.
+$cacheClone = Join-Path ([System.IO.Path]::GetTempPath()) 'dotnet-runtime-sparse-cache'
 
 # cone-mode sparse-checkout works at directory granularity; this pulls a few extra files
 # alongside the ones we vendor (e.g. Common/src/System has other unrelated helpers) - fine,
