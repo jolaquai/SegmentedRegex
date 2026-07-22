@@ -10,6 +10,12 @@
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <!-- Both TFM legs reference SegmentedRegex.SourceGen pinned to netstandard2.0 (see the
+         ProjectReference below). Building the legs in parallel (the cross-targeting default) lets
+         both legs build that shared project at once, racing on its output files (deps.json, dll) -
+         "process cannot access the file ... because it is being used by another process". Build the
+         legs sequentially instead; it's two small projects, the serialization cost is negligible. -->
+    <BuildInParallel>false</BuildInParallel>
     <LangVersion>latest</LangVersion>
     <RollForward>LatestMajor</RollForward>
     <DebugType>portable</DebugType>
