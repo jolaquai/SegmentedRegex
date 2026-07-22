@@ -7,9 +7,9 @@ namespace SegmentedRegex.Benchmarks;
 /// Target 2: quantify what segmentation costs, per construct. Same pattern and characters throughout;
 /// only the number of chunks changes, so the delta is purely the reader's boundary handling.
 /// </summary>
-[ShortRunJob]
+[MultiLaunchJob]
 [MemoryDiagnoser]
-[HideColumns("Error", "StdDev", "Median", "Job", "RatioSD")]
+[HideColumns("Median", "Job")]
 public class SegmentationOverheadBenchmarks
 {
     [Params("Literal", "Digits", "Alternation", "Email", "Backreference")]

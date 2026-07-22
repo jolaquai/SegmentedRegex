@@ -39,6 +39,15 @@ public ref struct SegmentedSpan
         _chunk = default;
         _chunkAbsStart = 0;
         _next = sequence.Start;
+
+#if PRIME_CHUNK_CACHE
+        // Prime the cache: Slice copies it, so an unprimed reader re-seeks from the origin on every
+        // derived slice rather than once per subject. Prototype, measured via -p:PrimeChunkCache=true.
+        if (_length != 0)
+        {
+            SeekTo(0, out _);
+        }
+#endif
     }
 
     // scoped: the ref must not be captured, or slicing off a field would look like a ref escape.

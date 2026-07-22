@@ -8,9 +8,9 @@ namespace SegmentedRegex.Benchmarks;
 /// string before delegating to <see cref="Regex"/>, so its cost should grow with subject length
 /// independently of how much of the subject the match actually needs to look at.
 /// </summary>
-[ShortRunJob]
+[MultiLaunchJob]
 [MemoryDiagnoser]
-[HideColumns("Error", "StdDev", "Median", "Job", "RatioSD")]
+[HideColumns("Median", "Job")]
 public class FallbackCostBenchmarks
 {
     [Params(256, 4096, 65536)]

@@ -9,9 +9,9 @@ namespace SegmentedRegex.Benchmarks;
 /// end-to-end numbers say cost tracks per-character work; these say which primitive is responsible, so
 /// an optimization pass can be aimed rather than guessed.
 /// </summary>
-[ShortRunJob]
+[MultiLaunchJob]
 [MemoryDiagnoser]
-[HideColumns("Error", "StdDev", "Median", "Job", "RatioSD", "Gen0", "Allocated", "Alloc Ratio")]
+[HideColumns("Median", "Job", "Gen0", "Allocated", "Alloc Ratio")]
 public class ReaderPrimitiveBenchmarks
 {
     private const int Length = 4096;

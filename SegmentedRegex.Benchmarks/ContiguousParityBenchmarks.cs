@@ -8,9 +8,9 @@ namespace SegmentedRegex.Benchmarks;
 /// <c>[GeneratedRegex]</c>. This is the load-bearing claim of the whole library - a contiguous subject
 /// is supposed to collapse to the same span operations the BCL runs.
 /// </summary>
-[ShortRunJob]
+[MultiLaunchJob]
 [MemoryDiagnoser]
-[HideColumns("Error", "StdDev", "Median", "Job", "RatioSD")]
+[HideColumns("Median", "Job")]
 public class ContiguousParityBenchmarks
 {
     [Params("Literal", "Digits", "Alternation", "Email", "Backreference")]

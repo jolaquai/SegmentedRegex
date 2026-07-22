@@ -10,6 +10,45 @@ dotnet run -c Release --project SegmentedRegex.Benchmarks -- --filter *Contiguou
 
 Release is required - BenchmarkDotNet refuses to produce meaningful numbers from a Debug build.
 
+## The job
+
+All five classes run under `[MultiLaunchJob]` ([MultiLaunchJobAttribute.cs](MultiLaunchJobAttribute.cs)),
+which is BenchmarkDotNet's default job with `LaunchCount` raised from 1 to 3. Warmup and iteration
+counts are deliberately left alone: the defaults are adaptive (warmup runs until timings settle,
+iterations grow until the confidence interval is tight), and pinning them to constants would swap a
+convergence criterion for a guess. Measured cost is ~18s per case at the default, so ~54s at three
+launches: about 18 minutes for one class, about an hour for the suite.
+
+The launch count is the only setting worth overriding, and it is what the old `[ShortRunJob]` got
+wrong - not its 3 warmup / 3 iterations so much as its **1 process**. The failure mode is per-process:
+a process settles into a tiering/PGO state and holds it, so every iteration it produces agrees with
+every other. More iterations cannot detect that, because they all come from the same process - the run
+converges, confidently, on whatever that process is doing. The unchanged `Digits` case measured 126 ns,
+299 ns, 354 ns and 398 ns across four such runs. Three launches turn that disagreement into a large
+`StdDev` instead of a clean mean, which is also why `Error`/`StdDev` are no longer hidden.
+
+**Every table below this line was produced under the old ShortRun job and is being re-measured.** Treat
+ratios under ~2x as unresolved until they are reproduced; the large ones (`(\w)\1`, the `StringBuilder`
+crossover, the 256-chunk degeneration) are far too big to be job artifacts and stand.
+
+## A/B-ing an unshipped change
+
+`-p:PrimeChunkCache=true` compiles the cache-priming prototype described under "Optimization work"
+below into `SegmentedSpan`'s constructor; without it that code is `#if`'d out and the library is
+unchanged. Run the two back to back into separate artifact directories, so the comparison is not
+exposed to the 20-30% drift this machine shows between sessions:
+
+```powershell
+dotnet run -c Release --project SegmentedRegex.Benchmarks -- `
+    --filter *ContiguousParity* --artifacts artifacts/baseline
+dotnet run -c Release --project SegmentedRegex.Benchmarks -p:PrimeChunkCache=true -- `
+    --filter *ContiguousParity* --artifacts artifacts/primed
+```
+
+Nothing else in the repo reads `PrimeChunkCache`, and the differential suite passes either way
+(`dotnet test -p:PrimeChunkCache=true`), so the switch is safe to leave in place while the prototype is
+being evaluated.
+
 The classes map onto the plan's three targets:
 
 - `ContiguousParityBenchmarks` - target 1: is the generated path on a single-segment subject within
@@ -152,11 +191,21 @@ temporary is discarded with it - an unprimed reader re-seeks from the start on e
 which is exactly what the emitted backreference does per candidate position. Priming the first chunk
 in the constructor roughly halves `(\w)\1` and more than halves `\d+`.
 
-It also makes the email pattern **2.5x slower**, reproducibly, bisected to that change alone. Nothing
-in it should touch a `LiteralAfterLoop` pattern - one extra `TryGet` per scan cannot account for
-thousands of nanoseconds - so the mechanism is still unknown, and it needs a profiler rather than more
-reading. Shipping a 2x win on two patterns alongside an unexplained 2.5x loss on a third is not a
-trade worth making blind.
+It appeared to also make the email pattern **2.5x slower**, which blocked shipping it. **That
+regression looks like a measurement artifact of the old ShortRun job, not a property of the change.**
+Two things say so, though the full-job re-measurement is still outstanding:
+
+- The prototype run's own report is self-inconsistent. Under priming, email `SegEx.IsMatch` measured
+  8,811 ns but `SegEx.Match+Value` measured 3,396 ns - and `Match` runs the identical scan *plus*
+  builds the result object. Strictly more work cannot be 2.6x faster. At baseline the same two cells
+  are 3,462 ns and 3,558 ns, i.e. the ~100 ns apart they should be.
+- Re-applying priming did not reproduce it: email `IsMatch` came out at 3,370 ns against a 3,462 ns
+  baseline. In the same pair of runs `Digits` moved the *opposite* way from the prototype's report
+  (3.15x -> 4.30x here, 3.0x -> 1.4x there), which is the same instability from the other direction.
+
+So the open question is no longer "why does priming hurt the email pattern" but "what does priming
+actually do", measured properly. The `(\w)\1` win has now been seen twice (10.90x -> 5.90x on the
+re-run) and is almost certainly real.
 
 The `SequenceEqual` fast path for windows inside their cached chunks was worth almost nothing
 (62.8x -> 59.7x on the primitive), so the chunk-walking loop is not the cost. Taking the parameter as
@@ -168,8 +217,8 @@ there is a floor here that local tweaks will not get past.
 
 In rough order of value:
 
-1. **Understand the email regression under cache priming**, with a profiler. It gates the single
-   biggest win available, and no amount of code reading has explained it.
+1. **Re-measure cache priming under the full job** (see "A/B-ing an unshipped change"). The regression
+   that blocked it appears not to exist; what is left is to confirm the wins and take the change.
 2. The per-character read path. Indexing is 2.6x; the indexer bounds-checks twice (once against the
    window, once inside `_chunk[local]`), which `Unsafe.Add` past the cache-hit test would remove.
 3. Short `SequenceEqual` has a floor well above a span compare even after the above. If backreferences

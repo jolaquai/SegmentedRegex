@@ -10,9 +10,9 @@ namespace SegmentedRegex.Benchmarks;
 /// it must first flatten the builder - either into a string it allocates, or into a buffer the caller
 /// rents and copies into by hand.
 /// </summary>
-[ShortRunJob]
+[MultiLaunchJob]
 [MemoryDiagnoser]
-[HideColumns("Error", "StdDev", "Median", "Job", "RatioSD")]
+[HideColumns("Median", "Job")]
 public class StringBuilderBenchmarks
 {
     /// <summary>Literal is near parity contiguous; Digits pays more per character.</summary>

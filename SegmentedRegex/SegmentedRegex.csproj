@@ -35,6 +35,12 @@
     <NoWarn>$(NoWarn);CA1711;CA1510</NoWarn>
   </PropertyGroup>
 
+  <!-- Unshipped perf prototype, off by default: build with -p:PrimeChunkCache=true to A/B it.
+       See SegmentedRegex.Benchmarks/README.md. -->
+  <PropertyGroup Condition="'$(PrimeChunkCache)' == 'true'">
+    <DefineConstants>$(DefineConstants);PRIME_CHUNK_CACHE</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <RootNamespace>SegmentedRegex</RootNamespace>
 
