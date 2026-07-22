@@ -128,6 +128,38 @@ function Test-CloneUsable {
     finally { Pop-Location }
 }
 
+# SourceGen is referenced (as an analyzer) by multiple TFM builds/projects, so MSBuild can invoke
+# this script concurrently from separate processes. They'd otherwise race on the single shared
+# $cacheClone path (two `git clone`s into the same not-yet-existing directory - the loser gets
+# "destination path already exists" instead of a clean clone). A named Mutex serializes them.
+$cacheLockName = 'SegmentedRegex-dotnet-runtime-sparse-cache-lock'
+
+function Invoke-WithCacheLock {
+    param([scriptblock]$Action)
+
+    $mutex = New-Object System.Threading.Mutex($false, $cacheLockName)
+    $acquired = $false
+    try {
+        try {
+            $acquired = $mutex.WaitOne([TimeSpan]::FromMinutes(10))
+        }
+        catch [System.Threading.AbandonedMutexException] {
+            # Previous holder crashed mid-clone without releasing - we still got ownership.
+            # Test-CloneUsable (called from Ensure-SparseClone) detects and repairs a half-finished
+            # clone, so it's safe to just proceed as the new owner.
+            $acquired = $true
+        }
+        if (-not $acquired) {
+            throw "timed out waiting for the dotnet-runtime-sparse-cache lock (held >10 min by another process)."
+        }
+        & $Action
+    }
+    finally {
+        if ($acquired) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+}
+
 function Ensure-SparseClone {
     if (-not (Test-CloneUsable)) {
         if (Test-Path $cacheClone) {
@@ -174,7 +206,7 @@ if ($Mode -eq 'Check') {
     # network/git failures here are a DIFFERENT outcome from "drift found" - a build integration
     # should be able to tell "I don't know" apart from "confirmed problem". exit 2, not 1.
     try {
-        Ensure-SparseClone
+        Invoke-WithCacheLock { Ensure-SparseClone }
     }
     catch {
         Write-Host "vendor/dotnet-runtime : error REGEXGENSYNC000: could not reach upstream to check for drift ($($_.Exception.Message))"
@@ -237,7 +269,7 @@ if ($Mode -eq 'Check') {
     }
 }
 else {
-    Ensure-SparseClone
+    Invoke-WithCacheLock { Ensure-SparseClone }
     Push-Location $cacheClone
     try {
         $target = if ($Sha) { $Sha } else { Get-CurrentPin }
