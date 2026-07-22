@@ -8,9 +8,9 @@
     <!-- Build before asking for the path. GetTargetPath only reports where the assembly *would* be; on
          its own it will happily hand back a stale one built for an earlier edit or a different
          configuration, and the package then ships a generator that does not match the source. -->
-    <!-- NoBuild=false override: `dotnet pack --no-build` (used by the release job) sets NoBuild=true
-         as a global property, which otherwise rides along into this nested MSBuild call and makes the
-         SDK refuse to run Build here (NETSDK1085) even though this project was never actually built. -->
+    <!-- NoBuild=false override: the release job packs with dotnet pack's no-build option, which sets
+         NoBuild=true as a global property. That otherwise rides along into this nested MSBuild call and
+         makes the SDK refuse to run Build here (NETSDK1085) even though this project was never actually built. -->
     <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;NoBuild=false" />
     <MSBuild Projects="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="_SourceGenOutput" />
