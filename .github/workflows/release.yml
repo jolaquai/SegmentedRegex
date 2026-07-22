@@ -29,8 +29,17 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      # -maxcpucount:1: the solution builds SegmentedRegex.SourceGen.csproj both as its own
+      # top-level entry in SegmentedRegex.slnx and as a ProjectReference from the cross-targeted
+      # SegmentedRegex.csproj. Attempts to fix the resulting race on its output files
+      # (deps.json - "being used by another process", MSB4018/GenerateDepsFile) by matching global
+      # properties across the two build requests didn't hold up: it passed once and then failed
+      # again on the exact same commit, so whatever MSBuild is actually doing internally here isn't
+      # something we can reliably reason about from the outside. Forcing a single build node makes
+      # concurrent writes structurally impossible instead of relying on request-dedup internals we
+      # can't verify - the build is 4 small projects, so serializing it costs nothing that matters.
       - name: Build
-        run: dotnet build --no-restore -c Release
+        run: dotnet build --no-restore -c Release -maxcpucount:1
 
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
