@@ -5,7 +5,11 @@
 
 .PARAMETER Mode
   Check  - fetch latest upstream, diff the tracked files against the pinned SHA, report drift.
-           Does not touch vendor/ or the pin file. Exit code: 0 = clean, 1 = drift found,
+           Never touches vendor/. If upstream moved but none of the tracked files actually
+           changed, that's a safe no-op as far as vendored content goes, so the pin file IS
+           advanced to the new head - otherwise every future Check re-diffs an ever-widening,
+           already-known-clean commit range instead of starting fresh from the last confirmed-clean
+           commit. Exit code: 0 = clean (including the auto-advance case above), 1 = drift found,
            2 = could not perform the check (network/git failure) - distinct from drift on
            purpose, so a build integration can treat "couldn't check" differently from
            "confirmed drift".
@@ -237,6 +241,11 @@ if ($Mode -eq 'Check') {
 
         if ($changed.Count -eq 0) {
             Write-Host "Upstream moved ($pinned -> $latest) but none of the $($files.Count) tracked files changed."
+            # Nothing vendored actually differs, so there's nothing to review/copy - just advance
+            # the pin so the next Check starts from here instead of re-diffing this same
+            # already-known-clean range again (and every range after it, forever).
+            Set-Content $pinFile $latest -NoNewline
+            Write-Host "Advanced the pin to $latest."
             exit 0
         }
 
