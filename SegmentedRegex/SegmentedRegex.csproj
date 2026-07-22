@@ -67,9 +67,21 @@
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
 
-    <!-- Pinned, not $(TargetFramework): Roslyn requires analyzers/generators to be netstandard2.0,
-         so propagating this project's TFM into it fails NETSDK1005 on the net10.0 leg. -->
-    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
+    <!-- Roslyn requires analyzers/generators to be netstandard2.0. Without any override, a
+         multi-targeted consumer's ProjectReference forces its OWN current leg's TargetFramework
+         onto the referenced project as a global property - for the net10.0 leg that's NETSDK1005
+         (SourceGen only declares netstandard2.0). UndefineProperties strips TargetFramework from
+         the global properties passed down instead of overriding it to a fixed value: SourceGen then
+         falls back to its own single declared TFM either way, but crucially this also makes the
+         global-properties set here identical to how SegmentedRegex.SourceGen.csproj is built as its own
+         top-level entry in SegmentedRegex.slnx (no TargetFramework override there either). Using
+         SetTargetFramework="TargetFramework=netstandard2.0" instead resolves to the same TFM but as
+         a *different* global-properties set, so MSBuild treats the two as separate, undeduplicated
+         build requests for the same project - which can run concurrently and race on its output
+         files (deps.json etc., surfaced as MSB4018/GenerateDepsFile "being used by another
+         process"). Matching the global-properties set here lets MSBuild recognize both requests as
+         the same project instance and build it once. -->
+    <ProjectReference Include="..\SegmentedRegex.SourceGen\SegmentedRegex.SourceGen.csproj" ReferenceOutputAssembly="false" UndefineProperties="TargetFramework" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
